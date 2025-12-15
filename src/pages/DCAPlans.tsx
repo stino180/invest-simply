@@ -1,0 +1,156 @@
+import { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { AppShell } from '@/components/layout/AppShell';
+import { DCACard } from '@/components/dca/DCACard';
+import { CreateDCAModal } from '@/components/dca/CreateDCAModal';
+import { mockDCAPlans, DCAplan } from '@/data/mockPortfolio';
+import { Button } from '@/components/ui/button';
+
+const DCAPlans = () => {
+  const [plans, setPlans] = useState<DCAplan[]>(mockDCAPlans);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const activePlans = plans.filter(p => p.isActive);
+  const pausedPlans = plans.filter(p => !p.isActive);
+
+  const handleToggle = (id: string) => {
+    setPlans(plans.map(plan => 
+      plan.id === id ? { ...plan, isActive: !plan.isActive } : plan
+    ));
+  };
+
+  const handleDelete = (id: string) => {
+    setPlans(plans.filter(plan => plan.id !== id));
+  };
+
+  const handleCreate = (newPlan: { assetId: string; amount: number; frequency: string }) => {
+    const asset = plans.find(p => p.assetId === newPlan.assetId);
+    // In real app, fetch asset details
+    const mockNew: DCAplan = {
+      id: `dca_${Date.now()}`,
+      assetId: newPlan.assetId,
+      symbol: newPlan.assetId.toUpperCase(),
+      name: newPlan.assetId,
+      icon: '₿',
+      amount: newPlan.amount,
+      frequency: newPlan.frequency as DCAplan['frequency'],
+      nextExecution: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+      totalInvested: 0,
+      isActive: true,
+      createdAt: new Date(),
+    };
+    setPlans([...plans, mockNew]);
+  };
+
+  const totalMonthlyInvestment = activePlans.reduce((total, plan) => {
+    const multiplier = {
+      daily: 30,
+      weekly: 4,
+      biweekly: 2,
+      monthly: 1,
+    }[plan.frequency];
+    return total + (plan.amount * multiplier);
+  }, 0);
+
+  return (
+    <AppShell>
+      <div className="p-4 safe-top space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold font-display">DCA Plans</h1>
+            <p className="text-sm text-muted-foreground">Automate your investments</p>
+          </div>
+          <Button 
+            onClick={() => setShowCreateModal(true)}
+            className="rounded-xl gradient-primary"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            New
+          </Button>
+        </div>
+
+        {/* Summary Card */}
+        <div className="p-4 rounded-xl glass">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Monthly investment</p>
+              <p className="text-2xl font-bold font-display">
+                ${totalMonthlyInvestment.toLocaleString()}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">Active plans</p>
+              <p className="text-2xl font-bold text-primary">{activePlans.length}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Active Plans */}
+        {activePlans.length > 0 && (
+          <div>
+            <h3 className="font-semibold mb-3 text-sm text-muted-foreground uppercase tracking-wide">
+              Active ({activePlans.length})
+            </h3>
+            <div className="space-y-3">
+              {activePlans.map((plan) => (
+                <DCACard
+                  key={plan.id}
+                  plan={plan}
+                  onToggle={handleToggle}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Paused Plans */}
+        {pausedPlans.length > 0 && (
+          <div>
+            <h3 className="font-semibold mb-3 text-sm text-muted-foreground uppercase tracking-wide">
+              Paused ({pausedPlans.length})
+            </h3>
+            <div className="space-y-3">
+              {pausedPlans.map((plan) => (
+                <DCACard
+                  key={plan.id}
+                  plan={plan}
+                  onToggle={handleToggle}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {plans.length === 0 && (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4">
+              <Plus className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-2">No DCA plans yet</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Create your first automated investment plan
+            </p>
+            <Button 
+              onClick={() => setShowCreateModal(true)}
+              className="rounded-xl gradient-primary"
+            >
+              Create DCA Plan
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <CreateDCAModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onConfirm={handleCreate}
+      />
+    </AppShell>
+  );
+};
+
+export default DCAPlans;
