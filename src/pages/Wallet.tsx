@@ -32,14 +32,14 @@ const Wallet = () => {
       <div className="p-4 safe-top space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold font-display">Wallet</h1>
+          <h1 className="text-2xl font-bold font-display text-foreground">Wallet</h1>
           <p className="text-sm text-muted-foreground">Manage your funds</p>
         </div>
 
         {/* Balance Card */}
         <div className="p-6 rounded-2xl gradient-card shadow-glow">
           <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
-          <h2 className="text-4xl font-bold font-display mb-4">
+          <h2 className="text-4xl font-bold font-display mb-4 text-foreground">
             ${mockBalance.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </h2>
           
@@ -58,7 +58,7 @@ const Wallet = () => {
         {/* Wallet Address */}
         <div className="p-4 rounded-xl bg-card">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Your Wallet</h3>
+            <h3 className="font-semibold text-foreground">Your Wallet</h3>
             <button
               onClick={() => setShowQR(!showQR)}
               className="p-2 rounded-lg hover:bg-secondary transition-colors"
@@ -97,7 +97,7 @@ const Wallet = () => {
 
         {/* Payment Methods */}
         <div>
-          <h3 className="font-semibold mb-3">Payment Methods</h3>
+          <h3 className="font-semibold mb-3 text-foreground">Payment Methods</h3>
           <div className="space-y-2">
             {paymentMethods.map((method) => (
               <div
@@ -109,7 +109,7 @@ const Wallet = () => {
                     {method.icon}
                   </div>
                   <div>
-                    <div className="font-semibold">{method.name}</div>
+                    <div className="font-semibold text-foreground">{method.name}</div>
                     <div className="text-sm text-muted-foreground">
                       {method.connected ? 'Connected' : 'Not connected'}
                     </div>
@@ -129,7 +129,7 @@ const Wallet = () => {
 
         {/* Transaction History */}
         <div>
-          <h3 className="font-semibold mb-3">Recent Transactions</h3>
+          <h3 className="font-semibold mb-3 text-foreground">Recent Transactions</h3>
           <TransactionList transactions={mockTransactions} limit={5} />
         </div>
       </div>

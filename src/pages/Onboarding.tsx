@@ -60,7 +60,7 @@ export const Onboarding = () => {
               <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mb-6 shadow-glow">
                 <span className="text-3xl font-bold text-primary-foreground">S</span>
               </div>
-              <h1 className="text-4xl font-bold font-display mb-3">
+              <h1 className="text-4xl font-bold font-display mb-3 text-foreground">
                 Stack<span className="text-gradient">Flow</span>
               </h1>
               <p className="text-lg text-muted-foreground">
@@ -76,7 +76,7 @@ export const Onboarding = () => {
                     <Icon className="w-6 h-6 text-primary" />
                   </div>
                   <div>
-                    <div className="font-semibold">{title}</div>
+                    <div className="font-semibold text-foreground">{title}</div>
                     <div className="text-sm text-muted-foreground">{desc}</div>
                   </div>
                 </div>
@@ -109,7 +109,7 @@ export const Onboarding = () => {
             </button>
 
             <div className="flex-1">
-              <h2 className="text-3xl font-bold font-display mb-2">
+              <h2 className="text-3xl font-bold font-display mb-2 text-foreground">
                 Enter your email
               </h2>
               <p className="text-muted-foreground mb-8">
@@ -162,7 +162,7 @@ export const Onboarding = () => {
             </button>
 
             <div className="flex-1">
-              <h2 className="text-3xl font-bold font-display mb-2">
+              <h2 className="text-3xl font-bold font-display mb-2 text-foreground">
                 Check your email
               </h2>
               <p className="text-muted-foreground mb-8">
