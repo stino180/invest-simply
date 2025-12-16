@@ -12,6 +12,7 @@ import AssetDetail from "./pages/AssetDetail";
 import DCAPlans from "./pages/DCAPlans";
 import Wallet from "./pages/Wallet";
 import Settings from "./pages/Settings";
+import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/dca" element={<DCAPlans />} />
               <Route path="/wallet" element={<Wallet />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/install" element={<Install />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
