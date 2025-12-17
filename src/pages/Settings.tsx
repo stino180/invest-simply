@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
-import { useAuth } from '@/context/AuthContext';
+import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
@@ -74,14 +74,18 @@ const SettingItem = ({
 
 const Settings = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { profile, walletAddress, logout } = usePrivyAuth();
   const [darkMode, setDarkMode] = useState(true);
   const [notifications, setNotifications] = useState(true);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/');
   };
+
+  const displayName = walletAddress 
+    ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` 
+    : 'User';
 
   return (
     <AppShell>
@@ -95,11 +99,11 @@ const Settings = () => {
         {/* Profile Card */}
         <div className="p-4 rounded-xl bg-card flex items-center gap-4">
           <div className="w-14 h-14 rounded-full gradient-primary flex items-center justify-center text-2xl font-bold text-primary-foreground">
-            {user?.name?.charAt(0) || 'D'}
+            {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1">
-            <div className="font-semibold">{user?.name || 'Demo User'}</div>
-            <div className="text-sm text-muted-foreground">{user?.email}</div>
+            <div className="font-semibold">{displayName}</div>
+            <div className="text-sm text-muted-foreground">{profile?.email || 'Wallet connected'}</div>
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground" />
         </div>
