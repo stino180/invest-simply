@@ -3,7 +3,7 @@ import { Copy, Check, Plus, ArrowUpRight, QrCode } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { TransactionList } from '@/components/transactions/TransactionList';
 import { mockTransactions, mockBalance } from '@/data/mockPortfolio';
-import { useAuth } from '@/context/AuthContext';
+import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -14,11 +14,11 @@ const paymentMethods = [
 ];
 
 const Wallet = () => {
-  const { user } = useAuth();
+  const { walletAddress: userWallet } = usePrivyAuth();
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
 
-  const walletAddress = user?.walletAddress || '0x742d...8cB2a';
+  const walletAddress = userWallet || '0x742d...8cB2a';
   const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
 
   const handleCopy = () => {
