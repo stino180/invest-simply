@@ -2,3 +2,6 @@ project_id = "udfrfcowkgarkigrimdl"
 
 [functions.privy-auth]
 verify_jwt = false
+
+[functions.execute-dca]
+verify_jwt = false
