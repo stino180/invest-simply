@@ -14,7 +14,124 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      dca_executions: {
+        Row: {
+          amount_crypto: number | null
+          amount_usd: number
+          error_message: string | null
+          executed_at: string
+          hyperliquid_order_id: string | null
+          id: string
+          plan_id: string
+          price_at_execution: number | null
+          status: string
+        }
+        Insert: {
+          amount_crypto?: number | null
+          amount_usd: number
+          error_message?: string | null
+          executed_at?: string
+          hyperliquid_order_id?: string | null
+          id?: string
+          plan_id: string
+          price_at_execution?: number | null
+          status: string
+        }
+        Update: {
+          amount_crypto?: number | null
+          amount_usd?: number
+          error_message?: string | null
+          executed_at?: string
+          hyperliquid_order_id?: string | null
+          id?: string
+          plan_id?: string
+          price_at_execution?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dca_executions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "dca_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dca_plans: {
+        Row: {
+          amount_usd: number
+          asset: string
+          created_at: string
+          frequency: string
+          id: string
+          is_active: boolean
+          next_execution_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_usd: number
+          asset: string
+          created_at?: string
+          frequency: string
+          id?: string
+          is_active?: boolean
+          next_execution_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_usd?: number
+          asset?: string
+          created_at?: string
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          next_execution_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dca_plans_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          privy_did: string | null
+          updated_at: string
+          user_id: string | null
+          wallet_address: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          privy_did?: string | null
+          updated_at?: string
+          user_id?: string | null
+          wallet_address?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          privy_did?: string | null
+          updated_at?: string
+          user_id?: string | null
+          wallet_address?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
