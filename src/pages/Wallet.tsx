@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Copy, Check, Plus, ArrowUpRight, QrCode } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { TransactionList } from '@/components/transactions/TransactionList';
+import { RampModal } from '@/components/ramp/RampModal';
 import { mockTransactions, mockBalance } from '@/data/mockPortfolio';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ const Wallet = () => {
   const { walletAddress: userWallet } = usePrivyAuth();
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [rampMode, setRampMode] = useState<'onramp' | 'offramp' | null>(null);
 
   const walletAddress = userWallet || '0x742d...8cB2a';
   const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
@@ -44,16 +46,31 @@ const Wallet = () => {
           </h2>
           
           <div className="flex gap-3">
-            <Button className="flex-1 h-12 rounded-xl gradient-primary">
+            <Button 
+              className="flex-1 h-12 rounded-xl gradient-primary"
+              onClick={() => setRampMode('onramp')}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Funds
             </Button>
-            <Button variant="secondary" className="flex-1 h-12 rounded-xl">
+            <Button 
+              variant="secondary" 
+              className="flex-1 h-12 rounded-xl"
+              onClick={() => setRampMode('offramp')}
+            >
               <ArrowUpRight className="w-4 h-4 mr-2" />
               Withdraw
             </Button>
           </div>
         </div>
+
+        {/* ZKP2P Ramp Modal */}
+        <RampModal
+          open={rampMode !== null}
+          onOpenChange={(open) => !open && setRampMode(null)}
+          mode={rampMode || 'onramp'}
+          walletAddress={walletAddress}
+        />
 
         {/* Wallet Address */}
         <div className="p-4 rounded-xl bg-card">
