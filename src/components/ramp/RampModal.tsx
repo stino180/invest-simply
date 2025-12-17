@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ExternalLink, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ExternalLink, ArrowDownLeft, ArrowUpRight, Smartphone, Monitor } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -47,6 +47,16 @@ export const RampModal = ({ open, onOpenChange, mode, walletAddress }: RampModal
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [platform, setPlatform] = useState('venmo');
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const isOnramp = mode === 'onramp';
   const title = isOnramp ? 'Add Funds' : 'Withdraw Funds';
@@ -82,6 +92,66 @@ export const RampModal = ({ open, onOpenChange, mode, walletAddress }: RampModal
     onOpenChange(false);
   };
 
+  // Mobile view - show instructions
+  if (isMobile) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="w-5 h-5 text-primary" />
+              {title}
+            </DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <div className="flex items-start gap-3">
+                <Monitor className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-foreground mb-1">Desktop Required</p>
+                  <p className="text-sm text-muted-foreground">
+                    ZKP2P's on/off-ramp currently requires a desktop browser with the PeerAuth extension for secure payment verification.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="font-medium text-sm">To add or withdraw funds:</p>
+              <ol className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">1.</span>
+                  Open this app on a desktop browser
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">2.</span>
+                  Click "Add Funds" or "Withdraw"
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">3.</span>
+                  Complete the ZKP2P flow with your payment app
+                </li>
+              </ol>
+            </div>
+
+            {/* Wallet address for manual transfer */}
+            <div className="p-3 rounded-lg bg-secondary/50 text-sm">
+              <p className="text-muted-foreground mb-1">Or send USDC (Base) directly to:</p>
+              <code className="text-xs font-mono break-all text-foreground">{walletAddress}</code>
+            </div>
+          </div>
+
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
+            Got it
+          </Button>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Desktop view - show the ramp form
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
