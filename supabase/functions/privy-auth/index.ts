@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as jose from "https://deno.land/x/jose@v5.2.0/index.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +32,7 @@ serve(async (req) => {
       );
     }
 
-    // Verify Privy access token
+    // Get Privy credentials
     const privyAppId = Deno.env.get('PRIVY_APP_ID');
     const privyAppSecret = Deno.env.get('PRIVY_APP_SECRET');
     
@@ -43,28 +44,59 @@ serve(async (req) => {
       );
     }
 
-    // Verify token with Privy
-    const verifyResponse = await fetch('https://auth.privy.io/api/v1/token/verify', {
-      method: 'POST',
+    // Fetch the verification key from Privy
+    const appConfigResponse = await fetch(`https://auth.privy.io/api/v1/apps/${privyAppId}`, {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         'privy-app-id': privyAppId,
-        'Authorization': `Basic ${btoa(`${privyAppId}:${privyAppSecret}`)}`,
       },
-      body: JSON.stringify({ access_token: accessToken }),
     });
 
-    if (!verifyResponse.ok) {
-      const errorText = await verifyResponse.text();
-      console.error('Privy verification failed:', errorText);
+    if (!appConfigResponse.ok) {
+      console.error('Failed to fetch Privy app config');
       return new Response(
-        JSON.stringify({ error: 'Invalid Privy token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Failed to fetch Privy configuration' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const verifyData = await verifyResponse.json();
-    console.log('Privy verification successful:', verifyData.user_id);
+    const appConfig = await appConfigResponse.json();
+    const verificationKey = appConfig.verification_key;
+
+    if (!verificationKey) {
+      console.error('No verification key in Privy app config');
+      return new Response(
+        JSON.stringify({ error: 'Missing verification key' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify the JWT token using the public key
+    try {
+      const publicKey = await jose.importSPKI(verificationKey, 'ES256');
+      const { payload } = await jose.jwtVerify(accessToken, publicKey, {
+        issuer: 'privy.io',
+        audience: privyAppId,
+      });
+
+      console.log('Privy token verified successfully, user:', payload.sub);
+
+      // Verify the DID matches
+      if (payload.sub !== privyUser.did) {
+        console.error('Token subject does not match provided DID');
+        return new Response(
+          JSON.stringify({ error: 'Token mismatch' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (jwtError) {
+      console.error('JWT verification failed:', jwtError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Initialize Supabase admin client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
