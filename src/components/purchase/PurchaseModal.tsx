@@ -80,11 +80,11 @@ export const PurchaseModal = ({
           <>
             {/* Header */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-xl">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-xl">
                 {asset.icon}
               </div>
               <div>
-                <h3 className="text-xl font-bold">Buy {asset.symbol}</h3>
+                <h3 className="text-xl font-bold text-foreground">Buy {asset.symbol}</h3>
                 <p className="text-sm text-muted-foreground">{asset.name}</p>
               </div>
             </div>
@@ -102,7 +102,7 @@ export const PurchaseModal = ({
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full h-16 pl-10 pr-4 text-3xl font-bold bg-secondary rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors"
+                  className="w-full h-16 pl-10 pr-4 text-3xl font-bold text-foreground bg-secondary rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors"
                   placeholder="0"
                 />
               </div>
@@ -118,7 +118,7 @@ export const PurchaseModal = ({
                     'flex-1 py-2 rounded-lg text-sm font-medium transition-all',
                     amount === preset.toString()
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary hover:bg-secondary/80'
+                      : 'bg-secondary text-foreground hover:bg-secondary/80'
                   )}
                 >
                   ${preset}
@@ -130,11 +130,11 @@ export const PurchaseModal = ({
             <div className="space-y-3 mb-6 p-4 bg-secondary/50 rounded-xl">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Price</span>
-                <span className="font-medium">{formatPrice(asset.price)}</span>
+                <span className="font-medium text-foreground">{formatPrice(asset.price)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Est. quantity</span>
-                <span className="font-medium">
+                <span className="font-medium text-foreground">
                   ~{estimatedQty.toFixed(6)} {asset.symbol}
                 </span>
               </div>
