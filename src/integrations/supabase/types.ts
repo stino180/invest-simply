@@ -132,6 +132,91 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_balances: {
+        Row: {
+          created_at: string
+          id: string
+          last_synced_at: string
+          total_value_usd: number
+          updated_at: string
+          usdc_balance: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_synced_at?: string
+          total_value_usd?: number
+          updated_at?: string
+          usdc_balance?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_synced_at?: string
+          total_value_usd?: number
+          updated_at?: string
+          usdc_balance?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_balances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_holdings: {
+        Row: {
+          amount: number
+          asset: string
+          created_at: string
+          current_price: number | null
+          id: string
+          last_synced_at: string
+          symbol: string
+          updated_at: string
+          user_id: string
+          value_usd: number | null
+        }
+        Insert: {
+          amount?: number
+          asset: string
+          created_at?: string
+          current_price?: number | null
+          id?: string
+          last_synced_at?: string
+          symbol: string
+          updated_at?: string
+          user_id: string
+          value_usd?: number | null
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          created_at?: string
+          current_price?: number | null
+          id?: string
+          last_synced_at?: string
+          symbol?: string
+          updated_at?: string
+          user_id?: string
+          value_usd?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_holdings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
