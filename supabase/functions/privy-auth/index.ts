@@ -105,7 +105,9 @@ serve(async (req) => {
 
     const user: PrivyUser = privyUser;
     const privyDid = user.did;
-    const email = user.email || `${privyDid}@privy.local`;
+    // Sanitize DID for email format - remove colons and special chars
+    const sanitizedDid = privyDid.replace(/[^a-zA-Z0-9]/g, '_');
+    const email = user.email || `${sanitizedDid}@privy.local`;
     const walletAddress = user.wallet?.address;
 
     // Check if user exists in profiles by privy_did
