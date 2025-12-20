@@ -42,7 +42,7 @@ export const PortfolioCard = ({ totalValue, change, balance }: PortfolioCardProp
         </div>
         
         <div className="mb-4">
-          <h2 className="text-4xl font-bold font-display tracking-tight">
+          <h2 className="text-4xl font-bold font-display tracking-tight text-foreground">
             {isHidden ? '••••••' : formatCurrency(totalValue)}
           </h2>
         </div>
@@ -71,7 +71,7 @@ export const PortfolioCard = ({ totalValue, change, balance }: PortfolioCardProp
         <div className="mt-6 pt-4 border-t border-border/50">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Available Balance</span>
-            <span className="font-semibold">
+            <span className="font-semibold text-foreground">
               {isHidden ? '••••' : formatCurrency(balance)}
             </span>
           </div>
