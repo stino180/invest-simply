@@ -1,14 +1,25 @@
-import { TrendingUp, TrendingDown, Eye, EyeOff } from 'lucide-react';
+import { TrendingUp, TrendingDown, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
 
 interface PortfolioCardProps {
   totalValue: number;
   change: { value: number; percentage: number };
   balance: number;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  lastSynced?: string | null;
 }
 
-export const PortfolioCard = ({ totalValue, change, balance }: PortfolioCardProps) => {
+export const PortfolioCard = ({ 
+  totalValue, 
+  change, 
+  balance, 
+  onRefresh,
+  isRefreshing,
+  lastSynced
+}: PortfolioCardProps) => {
   const [isHidden, setIsHidden] = useState(false);
   const isPositive = change.value >= 0;
 
@@ -28,17 +39,35 @@ export const PortfolioCard = ({ totalValue, change, balance }: PortfolioCardProp
       
       <div className="relative">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-muted-foreground font-medium">Portfolio Value</span>
-          <button
-            onClick={() => setIsHidden(!isHidden)}
-            className="p-1.5 rounded-lg hover:bg-secondary/50 transition-colors"
-          >
-            {isHidden ? (
-              <EyeOff className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <Eye className="w-4 h-4 text-muted-foreground" />
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground font-medium">Portfolio Value</span>
+            {lastSynced && (
+              <span className="text-xs text-muted-foreground/60">
+                • {formatDistanceToNow(new Date(lastSynced), { addSuffix: true })}
+              </span>
             )}
-          </button>
+          </div>
+          <div className="flex items-center gap-1">
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                className="p-1.5 rounded-lg hover:bg-secondary/50 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={cn("w-4 h-4 text-muted-foreground", isRefreshing && "animate-spin")} />
+              </button>
+            )}
+            <button
+              onClick={() => setIsHidden(!isHidden)}
+              className="p-1.5 rounded-lg hover:bg-secondary/50 transition-colors"
+            >
+              {isHidden ? (
+                <EyeOff className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <Eye className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+          </div>
         </div>
         
         <div className="mb-4">
@@ -70,7 +99,7 @@ export const PortfolioCard = ({ totalValue, change, balance }: PortfolioCardProp
 
         <div className="mt-6 pt-4 border-t border-border/50">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Available Balance</span>
+            <span className="text-sm text-muted-foreground">Available USDC</span>
             <span className="font-semibold text-foreground">
               {isHidden ? '••••' : formatCurrency(balance)}
             </span>

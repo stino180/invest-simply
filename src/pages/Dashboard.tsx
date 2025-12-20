@@ -1,21 +1,34 @@
 import { Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { PortfolioCard } from '@/components/portfolio/PortfolioCard';
 import { HoldingsList } from '@/components/portfolio/HoldingsList';
 import { TransactionList } from '@/components/transactions/TransactionList';
-import { 
-  mockPortfolio, 
-  mockTransactions, 
-  mockBalance,
-  calculatePortfolioValue, 
-  calculatePortfolioChange 
-} from '@/data/mockPortfolio';
+import { mockTransactions } from '@/data/mockPortfolio';
 import { Button } from '@/components/ui/button';
+import { useWalletData } from '@/hooks/useWalletData';
+import { usePrivyAuth } from '@/context/PrivyAuthContext';
 
 const Dashboard = () => {
-  const totalValue = calculatePortfolioValue(mockPortfolio);
-  const change = calculatePortfolioChange(mockPortfolio);
+  const { isAuthenticated } = usePrivyAuth();
+  const { 
+    holdings, 
+    totalValue, 
+    usdcBalance, 
+    portfolioChange, 
+    isLoading, 
+    isSyncing, 
+    syncWallet,
+    lastSynced 
+  } = useWalletData();
+
+  // Auto-sync on first load if authenticated and no data
+  useEffect(() => {
+    if (isAuthenticated && !isLoading && holdings.length === 0 && !lastSynced) {
+      syncWallet();
+    }
+  }, [isAuthenticated, isLoading, holdings.length, lastSynced, syncWallet]);
 
   return (
     <AppShell>
@@ -37,12 +50,15 @@ const Dashboard = () => {
         {/* Portfolio Card */}
         <PortfolioCard 
           totalValue={totalValue} 
-          change={change} 
-          balance={mockBalance.usd}
+          change={portfolioChange} 
+          balance={usdcBalance}
+          onRefresh={syncWallet}
+          isRefreshing={isSyncing}
+          lastSynced={lastSynced}
         />
 
         {/* Holdings */}
-        <HoldingsList holdings={mockPortfolio} />
+        <HoldingsList holdings={holdings} isLoading={isLoading} />
 
         {/* Recent Activity */}
         <div>
