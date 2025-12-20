@@ -12,7 +12,7 @@ export const HoldingsList = ({ holdings }: HoldingsListProps) => {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1 mb-3">
-        <h3 className="font-semibold text-lg">Your Holdings</h3>
+        <h3 className="font-semibold text-lg text-foreground">Your Holdings</h3>
         <Link 
           to="/assets" 
           className="text-sm text-primary font-medium hover:underline"
@@ -36,11 +36,11 @@ export const HoldingsList = ({ holdings }: HoldingsListProps) => {
               className="flex items-center justify-between p-4 rounded-xl bg-card hover:bg-secondary/50 transition-all duration-200 group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg">
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg">
                   {holding.icon}
                 </div>
                 <div>
-                  <div className="font-semibold">{holding.symbol}</div>
+                  <div className="font-semibold text-foreground">{holding.symbol}</div>
                   <div className="text-sm text-muted-foreground">
                     {holding.amount.toFixed(holding.amount < 1 ? 6 : 4)} {holding.symbol}
                   </div>
@@ -49,7 +49,7 @@ export const HoldingsList = ({ holdings }: HoldingsListProps) => {
 
               <div className="flex items-center gap-2">
                 <div className="text-right">
-                  <div className="font-semibold">{formatPrice(value)}</div>
+                  <div className="font-semibold text-foreground">{formatPrice(value)}</div>
                   <div className={cn(
                     'text-sm font-medium',
                     isPositive ? 'text-success' : 'text-destructive'

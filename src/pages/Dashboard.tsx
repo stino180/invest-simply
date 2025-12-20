@@ -24,7 +24,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground">Good morning 👋</p>
-            <h1 className="text-2xl font-bold font-display">Dashboard</h1>
+            <h1 className="text-2xl font-bold font-display text-foreground">Dashboard</h1>
           </div>
           <Link to="/assets">
             <Button size="sm" className="rounded-xl gradient-primary">
@@ -47,7 +47,7 @@ const Dashboard = () => {
         {/* Recent Activity */}
         <div>
           <div className="flex items-center justify-between px-1 mb-3">
-            <h3 className="font-semibold text-lg">Recent Activity</h3>
+            <h3 className="font-semibold text-lg text-foreground">Recent Activity</h3>
             <Link 
               to="/transactions" 
               className="text-sm text-primary font-medium hover:underline"
