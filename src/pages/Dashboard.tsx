@@ -20,15 +20,16 @@ const Dashboard = () => {
     isLoading, 
     isSyncing, 
     syncWallet,
-    lastSynced 
+    lastSynced,
+    hasSynced
   } = useWalletData();
 
-  // Auto-sync on first load if authenticated and no data
+  // Auto-sync on first load if authenticated and no cached data
   useEffect(() => {
-    if (isAuthenticated && !isLoading && holdings.length === 0 && !lastSynced) {
+    if (isAuthenticated && !isLoading && !lastSynced && !hasSynced && !isSyncing) {
       syncWallet();
     }
-  }, [isAuthenticated, isLoading, holdings.length, lastSynced, syncWallet]);
+  }, [isAuthenticated, isLoading, lastSynced, hasSynced, isSyncing, syncWallet]);
 
   return (
     <AppShell>

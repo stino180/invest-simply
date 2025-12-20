@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
@@ -21,9 +21,10 @@ export interface WalletBalance {
 }
 
 export const useWalletData = () => {
-  const { profile, isAuthenticated } = usePrivyAuth();
+  const { profile, isAuthenticated, walletAddress } = usePrivyAuth();
   const queryClient = useQueryClient();
   const [isSyncing, setIsSyncing] = useState(false);
+  const hasSynced = useRef(false);
 
   // Fetch cached holdings from database
   const { data: holdings = [], isLoading: holdingsLoading } = useQuery({
@@ -70,14 +71,14 @@ export const useWalletData = () => {
   // Sync with Hyperliquid
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Not authenticated');
+      if (!profile?.id || !walletAddress) {
+        throw new Error('No wallet connected');
       }
 
       const { data, error } = await supabase.functions.invoke('sync-hyperliquid', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
+        body: {
+          profileId: profile.id,
+          walletAddress: walletAddress,
         },
       });
 
@@ -98,14 +99,15 @@ export const useWalletData = () => {
   });
 
   const syncWallet = useCallback(async () => {
-    if (isSyncing) return;
+    if (isSyncing || !isAuthenticated || !walletAddress) return;
     setIsSyncing(true);
+    hasSynced.current = true;
     try {
       await syncMutation.mutateAsync();
     } finally {
       setIsSyncing(false);
     }
-  }, [syncMutation, isSyncing]);
+  }, [syncMutation, isSyncing, isAuthenticated, walletAddress]);
 
   // Calculate portfolio metrics
   const totalValue = balance?.total_value_usd || 0;
@@ -127,5 +129,6 @@ export const useWalletData = () => {
     isSyncing,
     syncWallet,
     lastSynced: balance?.last_synced_at,
+    hasSynced: hasSynced.current,
   };
 };
