@@ -19,11 +19,6 @@ interface SpotClearinghouseState {
   balances: SpotBalance[];
 }
 
-interface AssetPrice {
-  coin: string;
-  price: string;
-}
-
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -31,48 +26,17 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
+    const { profileId, walletAddress } = await req.json();
+
+    if (!profileId || !walletAddress) {
+      throw new Error('Missing profileId or walletAddress');
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user from JWT
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      throw new Error('Unauthorized');
-    }
-
-    // Get user's profile with wallet address
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, wallet_address')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      console.error('Profile fetch error:', profileError);
-      throw new Error('Failed to fetch profile');
-    }
-
-    if (!profile?.wallet_address) {
-      console.log('No wallet address found for user');
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'No wallet connected',
-        holdings: [],
-        balance: { usdc_balance: 0, total_value_usd: 0 }
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log(`Fetching Hyperliquid data for wallet: ${profile.wallet_address}`);
+    console.log(`Fetching Hyperliquid data for wallet: ${walletAddress}`);
 
     // Fetch spot clearinghouse state from Hyperliquid
     const spotResponse = await fetch(HYPERLIQUID_INFO_URL, {
@@ -80,7 +44,7 @@ serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'spotClearinghouseState',
-        user: profile.wallet_address
+        user: walletAddress
       })
     });
 
@@ -152,14 +116,14 @@ serve(async (req) => {
     await supabase
       .from('wallet_holdings')
       .delete()
-      .eq('user_id', profile.id);
+      .eq('user_id', profileId);
 
     // Insert new holdings
     if (holdings.length > 0) {
       const { error: holdingsError } = await supabase
         .from('wallet_holdings')
         .insert(holdings.map(h => ({
-          user_id: profile.id,
+          user_id: profileId,
           asset: h.asset,
           symbol: h.symbol,
           amount: h.amount,
@@ -177,7 +141,7 @@ serve(async (req) => {
     const { error: balanceError } = await supabase
       .from('wallet_balances')
       .upsert({
-        user_id: profile.id,
+        user_id: profileId,
         usdc_balance: usdcBalance,
         total_value_usd: totalValue,
         last_synced_at: new Date().toISOString()

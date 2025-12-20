@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.execute-dca]
 verify_jwt = false
+
+[functions.sync-hyperliquid]
+verify_jwt = false
