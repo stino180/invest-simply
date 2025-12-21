@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { keccak256, stringToHex } from "https://esm.sh/viem@2.21.0";
+import msgpack from "https://esm.sh/msgpack-lite@0.1.26";
+import { keccak256, toHex } from "https://esm.sh/viem@2.21.0";
 import { privateKeyToAccount, generatePrivateKey } from "https://esm.sh/viem@2.21.0/accounts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 interface Profile {
@@ -13,8 +14,8 @@ interface Profile {
   user_id: string;
   privy_did: string;
   wallet_address: string;
-  network_mode: 'mainnet' | 'testnet';
-  wallet_type: 'privy' | 'external' | null;
+  network_mode: "mainnet" | "testnet";
+  wallet_type: "privy" | "external" | null;
   agent_wallet_address: string | null;
   agent_wallet_private_key_encrypted: string | null;
   agent_wallet_authorized_at?: string | null;
@@ -28,23 +29,23 @@ const TESTNET_EXCHANGE_URL = "https://api.hyperliquid-testnet.xyz/exchange";
 
 // Asset metadata mapping - spot assets have different indices
 const SPOT_ASSET_META: Record<string, { tokenId: number; szDecimals: number }> = {
-  "BTC": { tokenId: 1, szDecimals: 5 },
-  "ETH": { tokenId: 2, szDecimals: 4 },
-  "SOL": { tokenId: 5, szDecimals: 2 },
-  "DOGE": { tokenId: 4, szDecimals: 0 },
-  "AVAX": { tokenId: 7, szDecimals: 2 },
-  "LINK": { tokenId: 6, szDecimals: 2 },
-  "HYPE": { tokenId: 3, szDecimals: 2 },
-  "PURR": { tokenId: 8, szDecimals: 0 },
+  BTC: { tokenId: 1, szDecimals: 5 },
+  ETH: { tokenId: 2, szDecimals: 4 },
+  SOL: { tokenId: 5, szDecimals: 2 },
+  DOGE: { tokenId: 4, szDecimals: 0 },
+  AVAX: { tokenId: 7, szDecimals: 2 },
+  LINK: { tokenId: 6, szDecimals: 2 },
+  HYPE: { tokenId: 3, szDecimals: 2 },
+  PURR: { tokenId: 8, szDecimals: 0 },
 };
 
 // Decrypt the stored private key
 function decryptPrivateKey(encrypted: string): string | null {
   try {
     const decoded = atob(encrypted);
-    const parts = decoded.split(':');
+    const parts = decoded.split(":");
     if (parts.length >= 2) {
-      return parts.slice(1).join(':');
+      return parts.slice(1).join(":");
     }
     return null;
   } catch {
@@ -97,13 +98,13 @@ async function ensureAgentWallet(
 
 // Get current price from Hyperliquid
 async function getSpotPrice(asset: string, networkMode: string): Promise<number> {
-  const infoUrl = networkMode === 'testnet' ? TESTNET_INFO_URL : MAINNET_INFO_URL;
-  
+  const infoUrl = networkMode === "testnet" ? TESTNET_INFO_URL : MAINNET_INFO_URL;
+
   // Get spot meta and asset contexts
   const response = await fetch(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "spotMeta" })
+    body: JSON.stringify({ type: "spotMeta" }),
   });
 
   if (!response.ok) {
@@ -111,137 +112,42 @@ async function getSpotPrice(asset: string, networkMode: string): Promise<number>
     const midsResponse = await fetch(infoUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "allMids" })
+      body: JSON.stringify({ type: "allMids" }),
     });
-    
+
     if (!midsResponse.ok) {
       throw new Error(`Failed to fetch prices: ${midsResponse.statusText}`);
     }
-    
+
     const midsData = await midsResponse.json();
     const price = midsData[asset];
-    
+
     if (!price) {
       throw new Error(`Asset ${asset} not found`);
     }
-    
+
     return parseFloat(price);
   }
 
   // Try to get spot-specific price
   const data = await response.json();
   console.log("Spot meta response:", JSON.stringify(data).slice(0, 500));
-  
+
   // Fallback to allMids
   const midsResponse = await fetch(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "allMids" })
+    body: JSON.stringify({ type: "allMids" }),
   });
-  
+
   const midsData = await midsResponse.json();
   const price = midsData[asset];
-  
+
   if (!price) {
     throw new Error(`Asset ${asset} not found on Hyperliquid`);
   }
-  
+
   return parseFloat(price);
-}
-
-// Sign a typed data message using Privy's server-side wallet API
-async function signTypedDataWithPrivy(
-  privyDid: string,
-  walletAddress: string,
-  typedData: unknown
-): Promise<string> {
-  const PRIVY_APP_ID = Deno.env.get("PRIVY_APP_ID");
-  const PRIVY_APP_SECRET = Deno.env.get("PRIVY_APP_SECRET");
-
-  if (!PRIVY_APP_ID || !PRIVY_APP_SECRET) {
-    throw new Error("Privy credentials not configured");
-  }
-
-  console.log(`Signing with Privy for wallet: ${walletAddress}`);
-
-  const response = await fetch(
-    `https://auth.privy.io/api/v1/users/${privyDid}/wallets/${walletAddress}/rpc`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "privy-app-id": PRIVY_APP_ID,
-        "Authorization": `Basic ${btoa(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`)}`,
-      },
-      body: JSON.stringify({
-        method: "eth_signTypedData_v4",
-        params: {
-          typedData
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Privy signing error:", response.status, errorText);
-    throw new Error(`Privy signing failed: ${response.status} - ${errorText}`);
-  }
-
-  const result = await response.json();
-  console.log("Privy signature obtained successfully");
-  return result.data.signature;
-}
-
-// Sign using the user's agent wallet
-async function signTypedDataWithAgentWallet(privateKey: string, typedData: unknown): Promise<string> {
-  const account = privateKeyToAccount(privateKey as `0x${string}`);
-  console.log(`Signing with agent wallet: ${account.address}`);
-
-  const signature = await account.signTypedData(typedData as any);
-  console.log("Agent signature obtained successfully");
-  return signature;
-}
-
-// Build EIP-712 typed data for Hyperliquid order
-function buildOrderTypedData(
-  action: unknown,
-  nonce: number,
-  isMainnet: boolean
-) {
-  const domain = {
-    name: "Exchange",
-    version: "1",
-    chainId: isMainnet ? 1 : 421614,
-    verifyingContract: "0x0000000000000000000000000000000000000000" as `0x${string}`
-  };
-
-  const types = {
-    Agent: [
-      { name: "source", type: "string" },
-      { name: "connectionId", type: "bytes32" },
-    ],
-  };
-
-  const actionHash = hashHyperliquidAction(action, nonce);
-
-  const message = {
-    source: isMainnet ? "a" : "b",
-    connectionId: actionHash,
-  };
-
-  return {
-    domain,
-    types,
-    primaryType: "Agent" as const,
-    message
-  };
-}
-
-function hashHyperliquidAction(action: unknown, nonce: number): `0x${string}` {
-  const actionStr = JSON.stringify(action);
-  const combined = `${actionStr}${nonce}`;
-  return keccak256(stringToHex(combined));
 }
 
 function formatSize(size: number, szDecimals: number): string {
@@ -252,6 +158,74 @@ function formatSize(size: number, szDecimals: number): string {
 function formatPrice(price: number): string {
   const formatted = price.toFixed(2);
   return parseFloat(formatted).toString();
+}
+
+function hexToRsv(signatureHex: string): { r: string; s: string; v: number } {
+  const sig = signatureHex.startsWith("0x") ? signatureHex.slice(2) : signatureHex;
+  const r = `0x${sig.slice(0, 64)}`;
+  const s = `0x${sig.slice(64, 128)}`;
+  const v = parseInt(sig.slice(128, 130), 16); // viem returns 0/1 yParity
+  return { r, s, v };
+}
+
+// Correct Hyperliquid L1 action signing (matches SDK behavior)
+async function signL1ActionWithAgentWallet(params: {
+  privateKey: string;
+  action: unknown;
+  nonce: number;
+  isMainnet: boolean;
+  vaultAddress: string | null;
+}): Promise<{ r: string; s: string; v: number }> {
+  const { privateKey, action, nonce, isMainnet, vaultAddress } = params;
+
+  // 1) msgpack encode action
+  const actionBytes = msgpack.encode(action) as Uint8Array;
+
+  // 2) append vault address (20 bytes, all zeros if null)
+  const vaultBytes = vaultAddress
+    ? Uint8Array.from(
+        (vaultAddress.startsWith("0x") ? vaultAddress.slice(2) : vaultAddress)
+          .toLowerCase()
+          .match(/.{1,2}/g)!
+          .map((b) => parseInt(b, 16))
+      )
+    : new Uint8Array(20);
+
+  // 3) append nonce as 8-byte big-endian
+  const nonceHex = BigInt(nonce).toString(16).padStart(16, "0");
+  const nonceBytes = Uint8Array.from(nonceHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+
+  const concat = new Uint8Array(actionBytes.length + vaultBytes.length + nonceBytes.length);
+  concat.set(actionBytes, 0);
+  concat.set(vaultBytes, actionBytes.length);
+  concat.set(nonceBytes, actionBytes.length + vaultBytes.length);
+
+  // 4) keccak256 hash => connectionId
+  const connectionId = keccak256(toHex(concat));
+
+  // 5) sign EIP-712 typed data with chainId=1337 (Hyperliquid L1 actions)
+  const account = privateKeyToAccount(privateKey as `0x${string}`);
+  const signatureHex = await account.signTypedData({
+    domain: {
+      name: "Exchange",
+      version: "1",
+      chainId: 1337,
+      verifyingContract: "0x0000000000000000000000000000000000000000",
+    },
+    types: {
+      Agent: [
+        { name: "source", type: "string" },
+        { name: "connectionId", type: "bytes32" },
+      ],
+    },
+    primaryType: "Agent",
+    message: {
+      source: isMainnet ? "a" : "b",
+      connectionId,
+    },
+  } as any);
+
+  return hexToRsv(signatureHex);
 }
 
 serve(async (req) => {
