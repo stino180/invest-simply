@@ -69,6 +69,7 @@ export type Database = {
           id: string
           is_active: boolean
           next_execution_at: string | null
+          slippage: number
           specific_days: string[] | null
           timezone: string | null
           updated_at: string
@@ -84,6 +85,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           next_execution_at?: string | null
+          slippage?: number
           specific_days?: string[] | null
           timezone?: string | null
           updated_at?: string
@@ -99,6 +101,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           next_execution_at?: string | null
+          slippage?: number
           specific_days?: string[] | null
           timezone?: string | null
           updated_at?: string
