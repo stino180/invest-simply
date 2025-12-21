@@ -1,27 +1,42 @@
 import { useState, useEffect } from 'react';
-import { Shield, ExternalLink, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Shield, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
+import { useWallets } from '@privy-io/react-auth';
 import { toast } from 'sonner';
 
 interface AgentWalletAuthProps {
   onAuthorizationChange?: (isAuthorized: boolean) => void;
 }
 
+// EIP-712 types for Hyperliquid agent approval
+const APPROVE_AGENT_TYPES = {
+  "HyperliquidTransaction:ApproveAgent": [
+    { name: "hyperliquidChain", type: "string" },
+    { name: "agentAddress", type: "address" },
+    { name: "agentName", type: "string" },
+    { name: "nonce", type: "uint64" },
+  ],
+};
+
 export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps) => {
   const { profile } = usePrivyAuth();
+  const { wallets } = useWallets();
   const [agentAddress, setAgentAddress] = useState<string | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isConfirming, setIsConfirming] = useState(false);
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
 
   const networkMode = profile?.network_mode || 'mainnet';
-  const hyperliquidUrl = networkMode === 'testnet' 
-    ? 'https://app.hyperliquid-testnet.xyz/subaccounts'
-    : 'https://app.hyperliquid.xyz/subaccounts';
+  const isTestnet = networkMode === 'testnet';
+  const hyperliquidApiUrl = isTestnet 
+    ? 'https://api.hyperliquid-testnet.xyz/exchange'
+    : 'https://api.hyperliquid.xyz/exchange';
+  const signatureChainId = isTestnet ? 0x66eee : 0xa4b1; // Arbitrum Sepolia for testnet, Arbitrum One for mainnet
 
   useEffect(() => {
     fetchAgentStatus();
@@ -55,34 +70,110 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     }
   };
 
-  const handleConfirmAuthorization = async () => {
-    if (!profile?.id) return;
+  const handleAuthorize = async () => {
+    if (!profile?.id || !agentAddress) return;
     
-    setIsConfirming(true);
+    // Get the connected external wallet
+    const externalWallet = wallets.find(w => w.walletClientType !== 'privy');
+    if (!externalWallet) {
+      toast.error('No external wallet connected');
+      return;
+    }
+
+    setIsAuthorizing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('agent-wallet', {
+      // Get the wallet provider
+      const provider = await externalWallet.getEthereumProvider();
+      const walletAddress = externalWallet.address;
+
+      const nonce = Date.now();
+      const hyperliquidChain = isTestnet ? 'Testnet' : 'Mainnet';
+
+      // Build EIP-712 typed data
+      const domain = {
+        name: "HyperliquidSignTransaction",
+        version: "1",
+        chainId: signatureChainId,
+        verifyingContract: "0x0000000000000000000000000000000000000000" as const,
+      };
+
+      const message = {
+        hyperliquidChain,
+        agentAddress,
+        agentName: "DCA Bot",
+        nonce: BigInt(nonce),
+      };
+
+      // Request signature from wallet
+      const typedData = {
+        domain,
+        types: APPROVE_AGENT_TYPES,
+        primaryType: "HyperliquidTransaction:ApproveAgent",
+        message,
+      };
+
+      // Sign with the wallet
+      const signature = await provider.request({
+        method: 'eth_signTypedData_v4',
+        params: [walletAddress, JSON.stringify(typedData)],
+      });
+
+      // Submit to Hyperliquid
+      const action = {
+        type: "approveAgent",
+        hyperliquidChain,
+        signatureChainId: `0x${signatureChainId.toString(16)}`,
+        agentAddress,
+        agentName: "DCA Bot",
+        nonce,
+      };
+
+      const response = await fetch(hyperliquidApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          signature,
+          nonce,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'err') {
+        throw new Error(result.response || 'Failed to approve agent');
+      }
+
+      // Register authorization in our backend
+      const { error: registerError } = await supabase.functions.invoke('agent-wallet', {
         body: { action: 'register-authorization', profileId: profile.id }
       });
 
-      if (error) throw error;
+      if (registerError) throw registerError;
 
       setIsAuthorized(true);
       onAuthorizationChange?.(true);
-      toast.success('Agent wallet authorization confirmed!');
-    } catch (error) {
-      console.error('Error confirming authorization:', error);
-      toast.error('Failed to confirm authorization');
+      toast.success('Agent wallet authorized! Automated trading is now enabled.');
+    } catch (error: any) {
+      console.error('Error authorizing agent:', error);
+      if (error.message?.includes('User rejected')) {
+        toast.error('Signature request was rejected');
+      } else {
+        toast.error(error.message || 'Failed to authorize agent wallet');
+      }
     } finally {
-      setIsConfirming(false);
+      setIsAuthorizing(false);
     }
   };
 
   const handleRevokeAuthorization = async () => {
     if (!profile?.id) return;
     
-    setIsConfirming(true);
+    setIsRevoking(true);
     try {
-      const { data, error } = await supabase.functions.invoke('agent-wallet', {
+      // Note: Hyperliquid doesn't have a revoke API - we just remove from our DB
+      // The user would need to revoke on Hyperliquid's UI if they want to fully remove
+      const { error } = await supabase.functions.invoke('agent-wallet', {
         body: { action: 'revoke-authorization', profileId: profile.id }
       });
 
@@ -95,14 +186,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       console.error('Error revoking authorization:', error);
       toast.error('Failed to revoke authorization');
     } finally {
-      setIsConfirming(false);
-    }
-  };
-
-  const copyAddress = () => {
-    if (agentAddress) {
-      navigator.clipboard.writeText(agentAddress);
-      toast.success('Agent address copied!');
+      setIsRevoking(false);
     }
   };
 
@@ -136,15 +220,17 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
             variant="outline" 
             size="sm" 
             onClick={handleRevokeAuthorization}
-            disabled={isConfirming}
+            disabled={isRevoking}
           >
-            {isConfirming ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {isRevoking ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Revoke Authorization
           </Button>
         </CardContent>
       </Card>
     );
   }
+
+  const hasExternalWallet = wallets.some(w => w.walletClientType !== 'privy');
 
   return (
     <Card>
@@ -161,65 +247,40 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="text-xs">
-            This creates a sub-account on Hyperliquid that can only trade for you. 
+            This creates a trading agent on Hyperliquid that can only trade for you. 
             Your funds remain in your control and you can revoke access anytime.
           </AlertDescription>
         </Alert>
 
-        <div className="space-y-3">
-          <div className="text-sm font-medium">Steps to authorize:</div>
-          
-          <div className="space-y-2 text-sm">
-            <div className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-medium shrink-0">1</span>
-              <div>
-                <button 
-                  onClick={copyAddress}
-                  className="text-primary hover:underline cursor-pointer"
-                >
-                  Copy agent address
-                </button>
-                {agentAddress && (
-                  <code className="block text-xs bg-secondary px-2 py-1 rounded mt-1 text-muted-foreground">
-                    {agentAddress}
-                  </code>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-medium shrink-0">2</span>
-              <div>
-                <a 
-                  href={hyperliquidUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline inline-flex items-center gap-1"
-                >
-                  Open Hyperliquid Sub-accounts
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Connect your wallet and add the agent as an authorized trader
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-medium shrink-0">3</span>
-              <span>Come back and confirm authorization below</span>
-            </div>
+        {agentAddress && (
+          <div className="text-xs text-muted-foreground">
+            Agent address: <code className="bg-secondary px-1 rounded">{agentAddress.slice(0, 10)}...{agentAddress.slice(-8)}</code>
           </div>
-        </div>
+        )}
 
-        <Button 
-          onClick={handleConfirmAuthorization}
-          disabled={isConfirming}
-          className="w-full"
-        >
-          {isConfirming ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-          I've Authorized the Agent Wallet
-        </Button>
+        {!hasExternalWallet ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              No external wallet connected. Please connect a wallet like MetaMask to authorize.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Button 
+            onClick={handleAuthorize}
+            disabled={isAuthorizing}
+            className="w-full"
+          >
+            {isAuthorizing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Authorizing...
+              </>
+            ) : (
+              'Authorize Agent Wallet'
+            )}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
