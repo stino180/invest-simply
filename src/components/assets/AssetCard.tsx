@@ -1,6 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { CryptoAsset, cryptoColors } from '@/hooks/useCryptoPrices';
+import { CryptoAsset } from '@/hooks/useCryptoPrices';
 import { cn } from '@/lib/utils';
 import { SparklineChart } from './SparklineChart';
 
@@ -35,7 +35,7 @@ const formatPrice = (price: number): string => {
 
 export const AssetCard = ({ asset }: AssetCardProps) => {
   const isPositive = asset.change24h >= 0;
-  const brandColor = cryptoColors[asset.symbol] || '#888888';
+  const brandColor = asset.color || '#888888';
 
   return (
     <Link
