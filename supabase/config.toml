@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.sync-hyperliquid]
 verify_jwt = false
+
+[functions.fetch-crypto-prices]
+verify_jwt = false

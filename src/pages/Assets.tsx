@@ -1,40 +1,64 @@
 import { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, RefreshCw, Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { AssetCard } from '@/components/assets/AssetCard';
-import { mockAssets } from '@/data/mockAssets';
+import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
-const filters = ['All', 'Trending', 'Top Gainers', 'New'];
+const filters = ['All', 'Trending', 'Top Gainers', 'Top Losers'];
 
 const Assets = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
+  const { assets, isLoading, refetch } = useCryptoPrices();
 
-  const filteredAssets = mockAssets.filter(asset => {
+  const filteredAssets = assets.filter(asset => {
     const matchesSearch = 
       asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       asset.symbol.toLowerCase().includes(searchQuery.toLowerCase());
     
     if (activeFilter === 'Top Gainers') {
-      return matchesSearch && asset.change24h > 3;
+      return matchesSearch && asset.change24h > 0;
+    }
+    if (activeFilter === 'Top Losers') {
+      return matchesSearch && asset.change24h < 0;
     }
     
     return matchesSearch;
   });
 
-  // Sort by change for Top Gainers
-  const sortedAssets = activeFilter === 'Top Gainers' 
-    ? [...filteredAssets].sort((a, b) => b.change24h - a.change24h)
-    : filteredAssets;
+  // Sort based on filter
+  const sortedAssets = (() => {
+    if (activeFilter === 'Top Gainers') {
+      return [...filteredAssets].sort((a, b) => b.change24h - a.change24h);
+    }
+    if (activeFilter === 'Top Losers') {
+      return [...filteredAssets].sort((a, b) => a.change24h - b.change24h);
+    }
+    if (activeFilter === 'Trending') {
+      return [...filteredAssets].sort((a, b) => b.volume24h - a.volume24h);
+    }
+    return filteredAssets;
+  })();
 
   return (
     <AppShell>
       <div className="p-4 safe-top space-y-4">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold font-display">Assets</h1>
-          <p className="text-sm text-muted-foreground">Browse and invest in crypto</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold font-display">Assets</h1>
+            <p className="text-sm text-muted-foreground">Live prices from CoinGecko</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={refetch}
+            disabled={isLoading}
+          >
+            <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
+          </Button>
         </div>
 
         {/* Search */}
@@ -68,17 +92,23 @@ const Assets = () => {
         </div>
 
         {/* Asset List */}
-        <div className="space-y-2">
-          {sortedAssets.map((asset) => (
-            <AssetCard key={asset.id} asset={asset} />
-          ))}
-          
-          {sortedAssets.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              No assets found
-            </div>
-          )}
-        </div>
+        {isLoading && assets.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sortedAssets.map((asset) => (
+              <AssetCard key={asset.id} asset={asset} />
+            ))}
+            
+            {sortedAssets.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                No assets found
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </AppShell>
   );
