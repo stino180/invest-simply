@@ -49,7 +49,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     try {
       // First get the agent address
       const { data: agentData, error: agentError } = await supabase.functions.invoke('agent-wallet', {
-        body: { action: 'get-agent-address' }
+        body: { action: 'get-agent-address', profileId: profile.id }
       });
 
       if (agentError) throw agentError;
