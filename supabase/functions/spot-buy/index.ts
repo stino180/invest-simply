@@ -313,11 +313,15 @@ serve(async (req) => {
       grouping: "na"
     };
 
-    // Build typed data
-    const typedData = buildOrderTypedData(action, timestamp, isMainnet);
-    
-    // Sign with agent wallet
-    const signature = await signTypedDataWithAgentWallet(agentWallet.privateKey, typedData);
+    // Sign & submit as a Hyperliquid L1 action (SDK-style signing)
+    const sig = await signL1ActionWithAgentWallet({
+      privateKey: agentWallet.privateKey,
+      action,
+      nonce: timestamp,
+      isMainnet,
+      vaultAddress: null,
+    });
+
     const tradingAddress = agentWallet.address;
 
     // Submit to Hyperliquid
@@ -325,12 +329,8 @@ serve(async (req) => {
     const requestBody = {
       action,
       nonce: timestamp,
-      signature: {
-        r: signature.slice(0, 66),
-        s: "0x" + signature.slice(66, 130),
-        v: parseInt(signature.slice(130, 132), 16)
-      },
-      vaultAddress: null
+      signature: sig,
+      vaultAddress: null,
     };
 
     console.log("Submitting spot order to Hyperliquid...");
