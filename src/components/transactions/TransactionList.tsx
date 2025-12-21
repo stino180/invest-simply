@@ -1,13 +1,14 @@
 import { ArrowDownLeft, ArrowUpRight, RefreshCw } from 'lucide-react';
-import { Transaction } from '@/data/mockPortfolio';
 import { cn } from '@/lib/utils';
+import { WalletTransaction } from '@/hooks/useWalletData';
 
 interface TransactionListProps {
-  transactions: Transaction[];
+  transactions: WalletTransaction[];
   limit?: number;
 }
 
-const formatDate = (date: Date) => {
+const formatDate = (dateStr: string) => {
+  const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -23,7 +24,7 @@ const formatDate = (date: Date) => {
   }).format(date);
 };
 
-const getTransactionIcon = (type: Transaction['type']) => {
+const getTransactionIcon = (type: WalletTransaction['type']) => {
   switch (type) {
     case 'buy':
       return <RefreshCw className="w-4 h-4" />;
@@ -36,7 +37,7 @@ const getTransactionIcon = (type: Transaction['type']) => {
   }
 };
 
-const getTransactionColor = (type: Transaction['type']) => {
+const getTransactionColor = (type: WalletTransaction['type']) => {
   switch (type) {
     case 'buy':
       return 'bg-primary/20 text-primary';
@@ -49,16 +50,16 @@ const getTransactionColor = (type: Transaction['type']) => {
   }
 };
 
-const getTransactionLabel = (tx: Transaction) => {
+const getTransactionLabel = (tx: WalletTransaction) => {
   switch (tx.type) {
     case 'buy':
-      return `Bought ${tx.symbol}`;
+      return `Bought ${tx.symbol || 'Asset'}`;
     case 'sell':
-      return `Sold ${tx.symbol}`;
+      return `Sold ${tx.symbol || 'Asset'}`;
     case 'deposit':
-      return 'Deposit';
+      return tx.symbol ? `Deposit ${tx.symbol}` : 'Deposit';
     case 'withdraw':
-      return 'Withdrawal';
+      return tx.symbol ? `Withdraw ${tx.symbol}` : 'Withdrawal';
   }
 };
 

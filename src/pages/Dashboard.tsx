@@ -5,7 +5,6 @@ import { AppShell } from '@/components/layout/AppShell';
 import { PortfolioCard } from '@/components/portfolio/PortfolioCard';
 import { HoldingsList } from '@/components/portfolio/HoldingsList';
 import { TransactionList } from '@/components/transactions/TransactionList';
-import { mockTransactions } from '@/data/mockPortfolio';
 import { Button } from '@/components/ui/button';
 import { useWalletData } from '@/hooks/useWalletData';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
@@ -13,7 +12,8 @@ import { usePrivyAuth } from '@/context/PrivyAuthContext';
 const Dashboard = () => {
   const { isAuthenticated } = usePrivyAuth();
   const { 
-    holdings, 
+    holdings,
+    transactions,
     totalValue, 
     usdcBalance, 
     portfolioChange, 
@@ -72,7 +72,13 @@ const Dashboard = () => {
               See All
             </Link>
           </div>
-          <TransactionList transactions={mockTransactions} limit={3} />
+          {transactions.length > 0 ? (
+            <TransactionList transactions={transactions} limit={3} />
+          ) : (
+            <div className="p-4 text-center text-muted-foreground rounded-xl bg-card">
+              <p className="text-sm">No recent activity</p>
+            </div>
+          )}
         </div>
       </div>
     </AppShell>
