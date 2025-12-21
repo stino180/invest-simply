@@ -4,9 +4,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useQueryClient } from '@tanstack/react-query';
 
 export const NetworkToggle = () => {
   const { profile, refreshProfile } = usePrivyAuth();
+  const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   
   const isTestnet = profile?.network_mode === 'testnet';
@@ -27,11 +29,16 @@ export const NetworkToggle = () => {
       
       await refreshProfile();
       
+      // Invalidate wallet data queries to force re-sync with new network
+      queryClient.invalidateQueries({ queryKey: ['wallet-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+      
       toast({
         title: `Switched to ${newMode === 'testnet' ? 'Testnet' : 'Mainnet'}`,
         description: newMode === 'testnet' 
-          ? 'Now using Hyperliquid testnet for all operations' 
-          : 'Now using Hyperliquid mainnet for real trading',
+          ? 'Now using Hyperliquid testnet. Tap Sync to refresh wallet data.' 
+          : 'Now using Hyperliquid mainnet for real trading. Tap Sync to refresh.',
       });
     } catch (error) {
       console.error('Failed to update network mode:', error);
