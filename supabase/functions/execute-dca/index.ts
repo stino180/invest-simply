@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { keccak256, encodeAbiParameters, parseAbiParameters, toHex, stringToHex, concat, pad, numberToHex } from "https://esm.sh/viem@2.21.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +15,7 @@ interface DcaPlan {
   frequency: string;
   is_active: boolean;
   next_execution_at: string;
+  slippage: number;
 }
 
 interface Profile {
@@ -30,6 +32,16 @@ const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
 const TESTNET_INFO_URL = "https://api.hyperliquid-testnet.xyz/info";
 const TESTNET_EXCHANGE_URL = "https://api.hyperliquid-testnet.xyz/exchange";
 
+// Asset metadata mapping
+const ASSET_META: Record<string, { index: number; szDecimals: number }> = {
+  "BTC": { index: 0, szDecimals: 5 },
+  "ETH": { index: 1, szDecimals: 4 },
+  "SOL": { index: 5, szDecimals: 2 },
+  "DOGE": { index: 4, szDecimals: 0 },
+  "AVAX": { index: 7, szDecimals: 2 },
+  "LINK": { index: 6, szDecimals: 2 },
+};
+
 // Get current price from Hyperliquid
 async function getAssetPrice(asset: string, networkMode: string): Promise<number> {
   const infoUrl = networkMode === 'testnet' ? TESTNET_INFO_URL : MAINNET_INFO_URL;
@@ -37,9 +49,7 @@ async function getAssetPrice(asset: string, networkMode: string): Promise<number
   const response = await fetch(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "allMids"
-    })
+    body: JSON.stringify({ type: "allMids" })
   });
 
   if (!response.ok) {
@@ -56,11 +66,11 @@ async function getAssetPrice(asset: string, networkMode: string): Promise<number
   return parseFloat(price);
 }
 
-// Sign a message using Privy's server-side wallet API
-async function signWithPrivy(
+// Sign a typed data message using Privy's server-side wallet API
+async function signTypedDataWithPrivy(
   privyDid: string,
   walletAddress: string,
-  message: string
+  typedData: unknown
 ): Promise<string> {
   const PRIVY_APP_ID = Deno.env.get("PRIVY_APP_ID");
   const PRIVY_APP_SECRET = Deno.env.get("PRIVY_APP_SECRET");
@@ -69,7 +79,9 @@ async function signWithPrivy(
     throw new Error("Privy credentials not configured");
   }
 
-  // Privy server wallet signing endpoint
+  console.log(`Signing with Privy for wallet: ${walletAddress}`);
+
+  // Privy server wallet RPC endpoint
   const response = await fetch(
     `https://auth.privy.io/api/v1/users/${privyDid}/wallets/${walletAddress}/rpc`,
     {
@@ -80,10 +92,9 @@ async function signWithPrivy(
         "Authorization": `Basic ${btoa(`${PRIVY_APP_ID}:${PRIVY_APP_SECRET}`)}`,
       },
       body: JSON.stringify({
-        method: "personal_sign",
+        method: "eth_signTypedData_v4",
         params: {
-          message: message,
-          encoding: "utf-8"
+          typedData
         }
       })
     }
@@ -91,12 +102,69 @@ async function signWithPrivy(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Privy signing error:", errorText);
-    throw new Error(`Privy signing failed: ${response.status}`);
+    console.error("Privy signing error:", response.status, errorText);
+    throw new Error(`Privy signing failed: ${response.status} - ${errorText}`);
   }
 
   const result = await response.json();
+  console.log("Privy signature obtained successfully");
   return result.data.signature;
+}
+
+// Build EIP-712 typed data for Hyperliquid order
+function buildOrderTypedData(
+  action: unknown,
+  nonce: number,
+  isMainnet: boolean
+) {
+  const domain = {
+    name: "Exchange",
+    version: "1",
+    chainId: isMainnet ? 1 : 421614, // Mainnet or Arbitrum Sepolia for testnet
+    verifyingContract: "0x0000000000000000000000000000000000000000" as `0x${string}`
+  };
+
+  const types = {
+    Agent: [
+      { name: "source", type: "string" },
+      { name: "connectionId", type: "bytes32" },
+    ],
+  };
+
+  // Hyperliquid uses a specific action hash format
+  const actionHash = hashHyperliquidAction(action, nonce);
+
+  const message = {
+    source: isMainnet ? "a" : "b", // 'a' for mainnet, 'b' for testnet
+    connectionId: actionHash,
+  };
+
+  return {
+    domain,
+    types,
+    primaryType: "Agent" as const,
+    message
+  };
+}
+
+// Hash Hyperliquid action for signing
+function hashHyperliquidAction(action: unknown, nonce: number): `0x${string}` {
+  const actionStr = JSON.stringify(action);
+  const combined = `${actionStr}${nonce}`;
+  return keccak256(stringToHex(combined));
+}
+
+// Format number for Hyperliquid (remove trailing zeros)
+function formatSize(size: number, szDecimals: number): string {
+  const formatted = size.toFixed(szDecimals);
+  // Remove trailing zeros but keep at least szDecimals precision if needed
+  return parseFloat(formatted).toString();
+}
+
+function formatPrice(price: number): string {
+  // Hyperliquid uses 2 decimal places for prices typically
+  const formatted = price.toFixed(2);
+  return parseFloat(formatted).toString();
 }
 
 // Build and sign Hyperliquid order
@@ -104,84 +172,101 @@ async function executeHyperliquidOrder(
   profile: Profile,
   asset: string,
   amountUsd: number,
-  price: number,
+  currentPrice: number,
+  slippage: number,
   networkMode: string
-): Promise<{ orderId: string; amountCrypto: number }> {
+): Promise<{ orderId: string; amountCrypto: number; executedPrice: number }> {
   const exchangeUrl = networkMode === 'testnet' ? TESTNET_EXCHANGE_URL : MAINNET_EXCHANGE_URL;
-  const amountCrypto = amountUsd / price;
+  const isMainnet = networkMode === 'mainnet';
+  
+  const assetMeta = ASSET_META[asset];
+  if (!assetMeta) {
+    throw new Error(`Asset ${asset} not supported`);
+  }
+
+  // Calculate size and price with slippage for market-like execution
+  const amountCrypto = amountUsd / currentPrice;
+  const slippageMultiplier = 1 + (slippage / 100);
+  const limitPrice = currentPrice * slippageMultiplier;
+  
+  const formattedSize = formatSize(amountCrypto, assetMeta.szDecimals);
+  const formattedPrice = formatPrice(limitPrice);
+
+  console.log(`Placing order: ${formattedSize} ${asset} @ ${formattedPrice} (market: ${currentPrice})`);
+
+  const timestamp = Date.now();
   
   // Hyperliquid order action
-  const timestamp = Date.now();
   const action = {
     type: "order",
     orders: [{
-      a: getAssetIndex(asset), // asset index
+      a: assetMeta.index,
       b: true, // isBuy
-      p: price.toFixed(2), // price (market order uses current price)
-      s: amountCrypto.toFixed(6), // size
+      p: formattedPrice,
+      s: formattedSize,
       r: false, // reduceOnly
-      t: { limit: { tif: "Ioc" } } // Immediate or cancel for market-like behavior
+      t: { limit: { tif: "Ioc" } } // Immediate-or-cancel for market-like execution
     }],
     grouping: "na"
   };
 
-  const actionHash = await hashAction(action, timestamp);
+  // Build typed data for EIP-712 signing
+  const typedData = buildOrderTypedData(action, timestamp, isMainnet);
   
   // Sign with Privy
-  const signature = await signWithPrivy(
+  const signature = await signTypedDataWithPrivy(
     profile.privy_did,
     profile.wallet_address,
-    actionHash
+    typedData
   );
 
   // Submit to Hyperliquid
+  const requestBody = {
+    action,
+    nonce: timestamp,
+    signature: {
+      r: signature.slice(0, 66),
+      s: "0x" + signature.slice(66, 130),
+      v: parseInt(signature.slice(130, 132), 16)
+    },
+    vaultAddress: null
+  };
+
+  console.log("Submitting order to Hyperliquid...");
+
   const response = await fetch(exchangeUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action,
-      nonce: timestamp,
-      signature,
-      vaultAddress: null
-    })
+    body: JSON.stringify(requestBody)
   });
 
+  const responseText = await response.text();
+  console.log("Hyperliquid response:", responseText);
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Hyperliquid order failed: ${errorText}`);
+    throw new Error(`Hyperliquid order failed: ${responseText}`);
   }
 
-  const result = await response.json();
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Invalid Hyperliquid response: ${responseText}`);
+  }
   
   if (result.status === "err") {
     throw new Error(`Hyperliquid error: ${result.response}`);
   }
 
+  const orderId = result.response?.data?.statuses?.[0]?.resting?.oid || 
+                  result.response?.data?.statuses?.[0]?.filled?.oid ||
+                  `dca-${timestamp}`;
+
   return {
-    orderId: result.response?.data?.statuses?.[0]?.resting?.oid || `dca-${timestamp}`,
-    amountCrypto
+    orderId,
+    amountCrypto: parseFloat(formattedSize),
+    executedPrice: currentPrice
   };
-}
-
-// Get Hyperliquid asset index (simplified mapping)
-function getAssetIndex(asset: string): number {
-  const assetMap: Record<string, number> = {
-    "BTC": 0,
-    "ETH": 1,
-    "SOL": 5,
-    // Add more as needed
-  };
-  return assetMap[asset] ?? 0;
-}
-
-// Hash action for signing (simplified - real implementation needs EIP-712)
-async function hashAction(action: unknown, timestamp: number): Promise<string> {
-  const message = JSON.stringify({ action, nonce: timestamp });
-  const encoder = new TextEncoder();
-  const data = encoder.encode(message);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return "0x" + hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 // Calculate next execution time based on frequency
@@ -193,7 +278,9 @@ function getNextExecutionTime(frequency: string): Date {
     case "weekly":
       return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     case "monthly":
-      return new Date(now.setMonth(now.getMonth() + 1));
+      const nextMonth = new Date(now);
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      return nextMonth;
     default:
       return new Date(now.getTime() + 24 * 60 * 60 * 1000);
   }
@@ -248,11 +335,12 @@ serve(async (req) => {
         console.log(`Current ${plan.asset} price: $${price}`);
 
         // Execute order via Hyperliquid
-        const { orderId, amountCrypto } = await executeHyperliquidOrder(
+        const { orderId, amountCrypto, executedPrice } = await executeHyperliquidOrder(
           profile,
           plan.asset,
           plan.amount_usd,
           price,
+          plan.slippage || 1, // Default 1% slippage
           networkMode
         );
 
@@ -263,7 +351,7 @@ serve(async (req) => {
             plan_id: plan.id,
             amount_usd: plan.amount_usd,
             amount_crypto: amountCrypto,
-            price_at_execution: price,
+            price_at_execution: executedPrice,
             status: "completed",
             hyperliquid_order_id: orderId
           });
@@ -284,7 +372,7 @@ serve(async (req) => {
           status: "success",
           orderId,
           amountCrypto,
-          price
+          price: executedPrice
         });
 
         console.log(`Successfully executed plan ${plan.id}`);
