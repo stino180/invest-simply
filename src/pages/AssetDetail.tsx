@@ -5,7 +5,8 @@ import { AppShell } from '@/components/layout/AppShell';
 import { PriceChart } from '@/components/assets/PriceChart';
 import { PurchaseModal } from '@/components/purchase/PurchaseModal';
 import { useCryptoPrices } from '@/hooks/useCryptoPrices';
-import { mockBalance, mockPortfolio } from '@/data/mockPortfolio';
+import { useWalletData } from '@/hooks/useWalletData';
+import { mockBalance } from '@/data/mockPortfolio';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,10 +24,12 @@ const AssetDetail = () => {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   
   const { assets, isLoading, refetch } = useCryptoPrices();
+  const { holdings } = useWalletData();
   
   // Find asset by symbol (case insensitive)
   const asset = assets.find(a => a.symbol.toLowerCase() === id?.toLowerCase());
-  const holding = mockPortfolio.find(h => h.assetId === id);
+  // Find holding from real wallet data
+  const holding = holdings.find(h => h.symbol.toLowerCase() === id?.toLowerCase());
 
   if (isLoading) {
     return (
@@ -96,7 +99,7 @@ const AssetDetail = () => {
                   {asset.symbol.slice(0, 2)}
                 </div>
               )}
-              <span className="font-semibold">{asset.symbol}</span>
+              <span className="font-semibold text-foreground">{asset.symbol}</span>
             </div>
             <button 
               onClick={() => refetch()}
@@ -109,7 +112,7 @@ const AssetDetail = () => {
 
           {/* Price */}
           <div className="text-center mb-6">
-            <div className="text-4xl font-bold font-display mb-2">
+            <div className="text-4xl font-bold font-display mb-2 text-foreground">
               {formatPrice(asset.price)}
             </div>
             <div className={cn(
@@ -134,31 +137,25 @@ const AssetDetail = () => {
         </div>
 
         {/* Your Position */}
-        {holding && (
+        {holding && holding.amount > 0 && (
           <div className="px-4 mb-6">
             <div className="p-4 rounded-xl bg-card">
               <h3 className="text-sm text-muted-foreground mb-3">Your Position</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-2xl font-bold">
-                    {formatPrice(holding.amount * holding.currentPrice)}
+                  <div className="text-2xl font-bold text-foreground">
+                    {formatPrice(holding.value_usd || (holding.amount * (holding.current_price || asset.price)))}
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {holding.amount.toFixed(6)} {holding.symbol}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className={cn(
-                    'text-lg font-semibold',
-                    holding.currentPrice > holding.avgBuyPrice 
-                      ? 'text-success' 
-                      : 'text-destructive'
-                  )}>
-                    {holding.currentPrice > holding.avgBuyPrice ? '+' : ''}
-                    {(((holding.currentPrice - holding.avgBuyPrice) / holding.avgBuyPrice) * 100).toFixed(2)}%
+                  <div className="text-lg font-semibold text-foreground">
+                    @ {formatPrice(holding.current_price || asset.price)}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Avg. {formatPrice(holding.avgBuyPrice)}
+                    Current Price
                   </div>
                 </div>
               </div>
@@ -168,11 +165,11 @@ const AssetDetail = () => {
 
         {/* Stats */}
         <div className="px-4 mb-6">
-          <h3 className="font-semibold mb-3">Market Stats</h3>
+          <h3 className="font-semibold mb-3 text-foreground">Market Stats</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-4 rounded-xl bg-card">
               <div className="text-sm text-muted-foreground mb-1">Current Price</div>
-              <div className="font-semibold">{formatPrice(asset.price)}</div>
+              <div className="font-semibold text-foreground">{formatPrice(asset.price)}</div>
             </div>
             <div className="p-4 rounded-xl bg-card">
               <div className="text-sm text-muted-foreground mb-1">24h Change</div>
@@ -188,7 +185,7 @@ const AssetDetail = () => {
 
         {/* About */}
         <div className="px-4 mb-6">
-          <h3 className="font-semibold mb-3">About {asset.name}</h3>
+          <h3 className="font-semibold mb-3 text-foreground">About {asset.name}</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {asset.name} ({asset.symbol}) is a cryptocurrency available for trading on Hyperliquid. 
             Current price: {formatPrice(asset.price)} with a 24h change of {asset.change24h >= 0 ? '+' : ''}{asset.change24h.toFixed(2)}%.
