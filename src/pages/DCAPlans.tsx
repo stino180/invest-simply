@@ -1,27 +1,53 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { DCACard } from '@/components/dca/DCACard';
 import { CreateDCAModal, DCAFormData } from '@/components/dca/CreateDCAModal';
-import { mockDCAPlans, DCAplan } from '@/data/mockPortfolio';
+import { DCAplan } from '@/data/mockPortfolio';
 import { Button } from '@/components/ui/button';
+import { useDCAPlans, DBDCAPlan, getAssetInfo } from '@/hooks/useDCAPlans';
+import { usePrivyAuth } from '@/context/PrivyAuthContext';
+
+// Convert DB plan to display format
+const toDisplayPlan = (dbPlan: DBDCAPlan): DCAplan => {
+  const assetInfo = getAssetInfo(dbPlan.asset);
+  return {
+    id: dbPlan.id,
+    assetId: dbPlan.asset,
+    symbol: assetInfo.symbol,
+    name: assetInfo.name,
+    icon: assetInfo.icon,
+    amount: dbPlan.amount_usd,
+    frequency: dbPlan.frequency as DCAplan['frequency'],
+    nextExecution: dbPlan.next_execution_at ? new Date(dbPlan.next_execution_at) : new Date(),
+    totalInvested: 0, // Will be calculated from executions
+    isActive: dbPlan.is_active,
+    createdAt: new Date(dbPlan.created_at),
+    customDaysInterval: dbPlan.custom_days_interval || undefined,
+    executionTime: dbPlan.execution_time || undefined,
+    timezone: dbPlan.timezone || undefined,
+    specificDays: dbPlan.specific_days || undefined,
+    slippage: dbPlan.slippage,
+  };
+};
 
 const DCAPlans = () => {
-  const [plans, setPlans] = useState<DCAplan[]>(mockDCAPlans);
+  const { isAuthenticated, isLoading: authLoading, login } = usePrivyAuth();
+  const { plans: dbPlans, isLoading, createPlan, updatePlan, togglePlan, deletePlan } = useDCAPlans();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<DCAplan | null>(null);
 
+  // Convert DB plans to display format
+  const plans = dbPlans.map(toDisplayPlan);
   const activePlans = plans.filter(p => p.isActive);
   const pausedPlans = plans.filter(p => !p.isActive);
 
-  const handleToggle = (id: string) => {
-    setPlans(plans.map(plan => 
-      plan.id === id ? { ...plan, isActive: !plan.isActive } : plan
-    ));
+  const handleToggle = async (id: string) => {
+    await togglePlan(id);
   };
 
-  const handleDelete = (id: string) => {
-    setPlans(plans.filter(plan => plan.id !== id));
+  const handleDelete = async (id: string) => {
+    await deletePlan(id);
   };
 
   const handleEdit = (plan: DCAplan) => {
@@ -34,51 +60,11 @@ const DCAPlans = () => {
     setEditingPlan(null);
   };
 
-  const handleConfirm = (newPlan: DCAFormData) => {
-    const mockAsset = { btc: { symbol: 'BTC', name: 'Bitcoin', icon: '₿' }, eth: { symbol: 'ETH', name: 'Ethereum', icon: 'Ξ' }, sol: { symbol: 'SOL', name: 'Solana', icon: '◎' } };
-    const assetInfo = mockAsset[newPlan.assetId as keyof typeof mockAsset] || { symbol: newPlan.assetId.toUpperCase(), name: newPlan.assetId, icon: '₿' };
-    
+  const handleConfirm = async (formData: DCAFormData) => {
     if (editingPlan) {
-      // Update existing plan
-      setPlans(plans.map(plan => 
-        plan.id === editingPlan.id 
-          ? {
-              ...plan,
-              assetId: newPlan.assetId,
-              symbol: assetInfo.symbol,
-              name: assetInfo.name,
-              icon: assetInfo.icon,
-              amount: newPlan.amount,
-              frequency: newPlan.frequency as DCAplan['frequency'],
-              customDaysInterval: newPlan.customDaysInterval,
-              executionTime: newPlan.executionTime,
-              timezone: newPlan.timezone,
-              specificDays: newPlan.specificDays,
-              slippage: newPlan.slippage,
-            }
-          : plan
-      ));
+      await updatePlan(editingPlan.id, formData);
     } else {
-      // Create new plan
-      const mockNew: DCAplan = {
-        id: `dca_${Date.now()}`,
-        assetId: newPlan.assetId,
-        symbol: assetInfo.symbol,
-        name: assetInfo.name,
-        icon: assetInfo.icon,
-        amount: newPlan.amount,
-        frequency: newPlan.frequency as DCAplan['frequency'],
-        nextExecution: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
-        totalInvested: 0,
-        isActive: true,
-        createdAt: new Date(),
-        customDaysInterval: newPlan.customDaysInterval,
-        executionTime: newPlan.executionTime,
-        timezone: newPlan.timezone,
-        specificDays: newPlan.specificDays,
-        slippage: newPlan.slippage,
-      };
-      setPlans([...plans, mockNew]);
+      await createPlan(formData);
     }
   };
 
@@ -99,6 +85,39 @@ const DCAPlans = () => {
     }
     return total + (plan.amount * multiplier);
   }, 0);
+
+  // Show loading state
+  if (authLoading || isLoading) {
+    return (
+      <AppShell>
+        <div className="p-4 safe-top flex items-center justify-center min-h-[50vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <AppShell>
+        <div className="p-4 safe-top space-y-6">
+          <div className="text-center py-12">
+            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4">
+              <Plus className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-2 text-foreground">Sign in to manage DCA plans</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Create automated investment plans that run on your schedule
+            </p>
+            <Button onClick={login} className="rounded-xl gradient-primary">
+              Sign In
+            </Button>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
