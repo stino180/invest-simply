@@ -64,36 +64,52 @@ async function ensureAgentWallet(
   supabase: any,
   profile: Profile
 ): Promise<{ address: string; privateKey: string }> {
-  // If already has an agent wallet, decrypt and return it
+  const rotateAgentWallet = async () => {
+    console.log("Rotating agent wallet (missing/mismatched key)...");
+    const newPrivateKey = generatePrivateKey();
+    const account = privateKeyToAccount(newPrivateKey);
+    const encryptedKey = encryptPrivateKey(newPrivateKey);
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        agent_wallet_address: account.address as string,
+        agent_wallet_private_key_encrypted: encryptedKey,
+        // Key/address changed => prior authorization is invalid
+        agent_wallet_authorized_at: null,
+      })
+      .eq("id", profile.id);
+
+    if (updateError) {
+      throw new Error(`Failed to store agent wallet: ${updateError.message}`);
+    }
+
+    console.log(`Created new agent wallet: ${account.address}`);
+    return { address: account.address, privateKey: newPrivateKey };
+  };
+
+  // If already has an agent wallet, decrypt and validate it
   if (profile.agent_wallet_private_key_encrypted && profile.agent_wallet_address) {
     const privateKey = decryptPrivateKey(profile.agent_wallet_private_key_encrypted);
     if (privateKey) {
-      console.log(`Using existing agent wallet: ${profile.agent_wallet_address}`);
-      return { address: profile.agent_wallet_address, privateKey };
+      const derived = privateKeyToAccount(privateKey as `0x${string}`).address;
+      if (derived.toLowerCase() === profile.agent_wallet_address.toLowerCase()) {
+        console.log(`Using existing agent wallet: ${profile.agent_wallet_address}`);
+        return { address: profile.agent_wallet_address, privateKey };
+      }
+
+      console.warn(
+        `Agent wallet mismatch: stored=${profile.agent_wallet_address} derived=${derived}. Rotating.`
+      );
+      return await rotateAgentWallet();
     }
+
+    console.warn("Failed to decrypt agent wallet key. Rotating.");
+    return await rotateAgentWallet();
   }
 
-  // Generate new agent wallet
-  console.log("Generating new agent wallet for user...");
-  const newPrivateKey = generatePrivateKey();
-  const account = privateKeyToAccount(newPrivateKey);
-  const encryptedKey = encryptPrivateKey(newPrivateKey);
-
-  // Store in profile
-  const { error: updateError } = await supabase
-    .from("profiles")
-    .update({
-      agent_wallet_address: account.address as string,
-      agent_wallet_private_key_encrypted: encryptedKey,
-    })
-    .eq("id", profile.id);
-
-  if (updateError) {
-    throw new Error(`Failed to store agent wallet: ${updateError.message}`);
-  }
-
-  console.log(`Created new agent wallet: ${account.address}`);
-  return { address: account.address, privateKey: newPrivateKey };
+  // No agent wallet yet
+  return await rotateAgentWallet();
 }
 
 // Get current price from Hyperliquid

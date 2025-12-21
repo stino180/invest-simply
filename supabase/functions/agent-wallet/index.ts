@@ -56,16 +56,61 @@ serve(async (req) => {
         throw profileError;
       }
 
-      // If user already has an agent wallet, return it
+      // If user already has an agent wallet, validate the stored private key matches the address.
+      // If mismatched/corrupted (from older versions), rotate wallet and require re-authorization.
       if (profile?.agent_wallet_address) {
+        const encrypted = profile.agent_wallet_private_key_encrypted as string | null | undefined;
+        const decrypted = encrypted ? decryptPrivateKey(encrypted) : null;
+
+        if (decrypted) {
+          const derived = privateKeyToAccount(decrypted as `0x${string}`).address;
+          if (derived.toLowerCase() === profile.agent_wallet_address.toLowerCase()) {
+            return new Response(
+              JSON.stringify({
+                success: true,
+                agentAddress: profile.agent_wallet_address,
+                isAuthorized: !!profile.agent_wallet_authorized_at,
+                message: profile.agent_wallet_authorized_at
+                  ? "Agent wallet is authorized for automated trading"
+                  : "Authorize this address on Hyperliquid to enable automated trading",
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          console.warn(
+            `Agent wallet mismatch detected. stored=${profile.agent_wallet_address} derived=${derived}. Rotating.`
+          );
+        } else {
+          console.warn("Agent wallet key missing or failed to decrypt. Rotating.");
+        }
+
+        // Rotate agent wallet
+        const agentPrivateKey = generatePrivateKey();
+        const agentAccount = privateKeyToAccount(agentPrivateKey);
+        const agentAddress = agentAccount.address;
+        const encryptedKey = encryptPrivateKey(agentPrivateKey, profileId);
+
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            agent_wallet_address: agentAddress,
+            agent_wallet_private_key_encrypted: encryptedKey,
+            agent_wallet_authorized_at: null,
+          })
+          .eq("id", profileId);
+
+        if (updateError) {
+          console.error("Error rotating agent wallet:", updateError);
+          throw updateError;
+        }
+
         return new Response(
-          JSON.stringify({ 
-            success: true, 
-            agentAddress: profile.agent_wallet_address,
-            isAuthorized: !!profile.agent_wallet_authorized_at,
-            message: profile.agent_wallet_authorized_at 
-              ? "Agent wallet is authorized for automated trading"
-              : "Authorize this address on Hyperliquid to enable automated trading"
+          JSON.stringify({
+            success: true,
+            agentAddress,
+            isAuthorized: false,
+            message: "Agent wallet rotated. Please authorize the new address to enable automated trading.",
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
