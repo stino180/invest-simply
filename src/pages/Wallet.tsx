@@ -3,10 +3,12 @@ import { Copy, Check, Plus, ArrowUpRight, QrCode, RefreshCw } from 'lucide-react
 import { AppShell } from '@/components/layout/AppShell';
 import { TransactionList } from '@/components/transactions/TransactionList';
 import { RampModal } from '@/components/ramp/RampModal';
+import { AgentWalletAuth } from '@/components/wallet/AgentWalletAuth';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { useWalletData } from '@/hooks/useWalletData';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useWallets } from '@privy-io/react-auth';
 
 const paymentMethods = [
   { id: 'venmo', name: 'Venmo', icon: '💜', connected: true },
@@ -16,12 +18,17 @@ const paymentMethods = [
 
 const Wallet = () => {
   const { walletAddress: userWallet } = usePrivyAuth();
+  const { wallets } = useWallets();
   const { transactions, usdcBalance, isSyncing, syncWallet } = useWalletData();
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [rampMode, setRampMode] = useState<'onramp' | 'offramp' | null>(null);
 
   const walletAddress = userWallet || '0x742d...8cB2a';
+  
+  // Check if using external wallet (not Privy embedded)
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+  const isExternalWallet = !embeddedWallet && wallets.length > 0;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -111,6 +118,11 @@ const Wallet = () => {
             Send USDC (Arbitrum) to deposit funds
           </p>
         </div>
+
+        {/* Agent Wallet Authorization - Only for external wallets */}
+        {isExternalWallet && (
+          <AgentWalletAuth />
+        )}
 
         {/* Payment Methods */}
         <div>
