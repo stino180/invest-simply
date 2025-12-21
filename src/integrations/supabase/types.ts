@@ -122,6 +122,7 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          low_balance_threshold: number | null
           privy_did: string | null
           updated_at: string
           user_id: string | null
@@ -131,6 +132,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          low_balance_threshold?: number | null
           privy_did?: string | null
           updated_at?: string
           user_id?: string | null
@@ -140,6 +142,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          low_balance_threshold?: number | null
           privy_did?: string | null
           updated_at?: string
           user_id?: string | null
