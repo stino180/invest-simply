@@ -121,6 +121,7 @@ export type Database = {
         Row: {
           agent_wallet_address: string | null
           agent_wallet_authorized_at: string | null
+          agent_wallet_private_key_encrypted: string | null
           created_at: string
           email: string | null
           id: string
@@ -135,6 +136,7 @@ export type Database = {
         Insert: {
           agent_wallet_address?: string | null
           agent_wallet_authorized_at?: string | null
+          agent_wallet_private_key_encrypted?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -149,6 +151,7 @@ export type Database = {
         Update: {
           agent_wallet_address?: string | null
           agent_wallet_authorized_at?: string | null
+          agent_wallet_private_key_encrypted?: string | null
           created_at?: string
           email?: string | null
           id?: string

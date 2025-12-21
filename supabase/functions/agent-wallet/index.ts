@@ -7,9 +7,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Store the agent wallet private key securely in Supabase secrets
-// This is a singleton agent that can trade on behalf of authorized users
-const AGENT_PRIVATE_KEY = Deno.env.get("AGENT_WALLET_PRIVATE_KEY");
+// Decrypt the stored private key
+function decryptPrivateKey(encrypted: string): string | null {
+  try {
+    const decoded = atob(encrypted);
+    const parts = decoded.split(':');
+    if (parts.length >= 2) {
+      // Return everything after the first colon (the private key)
+      return parts.slice(1).join(':');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Encrypt private key for storage
+function encryptPrivateKey(privateKey: string, salt: string): string {
+  const combined = `${salt}:${privateKey}`;
+  return btoa(combined);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -23,26 +40,64 @@ serve(async (req) => {
 
     const { action, profileId, signature, nonce } = await req.json();
 
-    // Get or generate agent wallet address
-    let agentAccount;
-    if (AGENT_PRIVATE_KEY) {
-      agentAccount = privateKeyToAccount(AGENT_PRIVATE_KEY as `0x${string}`);
-    } else {
-      // For development/demo: generate deterministic address from a seed
-      // In production, you'd want to properly manage this key
-      console.warn("AGENT_WALLET_PRIVATE_KEY not set - using demo mode");
-      const demoKey = generatePrivateKey();
-      agentAccount = privateKeyToAccount(demoKey);
-    }
-
-    const agentAddress = agentAccount.address;
-
     if (action === "get-agent-address") {
-      // Return the agent wallet address that users need to authorize
+      // Get the user's specific agent wallet address
+      if (!profileId) {
+        throw new Error("Missing profileId");
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("agent_wallet_address, agent_wallet_private_key_encrypted, agent_wallet_authorized_at")
+        .eq("id", profileId)
+        .single();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      // If user already has an agent wallet, return it
+      if (profile?.agent_wallet_address) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            agentAddress: profile.agent_wallet_address,
+            isAuthorized: !!profile.agent_wallet_authorized_at,
+            message: profile.agent_wallet_authorized_at 
+              ? "Agent wallet is authorized for automated trading"
+              : "Authorize this address on Hyperliquid to enable automated trading"
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Generate new agent wallet for this user if they don't have one
+      const agentPrivateKey = generatePrivateKey();
+      const agentAccount = privateKeyToAccount(agentPrivateKey);
+      const agentAddress = agentAccount.address;
+      const encryptedKey = encryptPrivateKey(agentPrivateKey, profileId);
+
+      // Save to profile
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          agent_wallet_address: agentAddress,
+          agent_wallet_private_key_encrypted: encryptedKey,
+        })
+        .eq("id", profileId);
+
+      if (updateError) {
+        console.error("Error saving agent wallet:", updateError);
+        throw updateError;
+      }
+
+      console.log(`Generated new agent wallet ${agentAddress} for profile ${profileId}`);
+
       return new Response(
         JSON.stringify({ 
           success: true, 
           agentAddress,
+          isAuthorized: false,
           message: "Authorize this address on Hyperliquid to enable automated trading"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -51,15 +106,24 @@ serve(async (req) => {
 
     if (action === "register-authorization") {
       // User has authorized the agent wallet on Hyperliquid
-      // Update their profile to mark authorization
       if (!profileId) {
         throw new Error("Missing profileId");
+      }
+
+      // Get the user's agent wallet address
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("agent_wallet_address")
+        .eq("id", profileId)
+        .single();
+
+      if (profileError || !profile?.agent_wallet_address) {
+        throw new Error("No agent wallet found for this profile");
       }
 
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
-          agent_wallet_address: agentAddress,
           agent_wallet_authorized_at: new Date().toISOString(),
           wallet_type: 'external'
         })
@@ -76,7 +140,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           message: "Agent wallet authorization recorded",
-          agentAddress 
+          agentAddress: profile.agent_wallet_address
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -98,14 +162,13 @@ serve(async (req) => {
         throw profileError;
       }
 
-      // Check Hyperliquid for actual authorization
       const isAuthorized = profile?.agent_wallet_authorized_at !== null;
 
       return new Response(
         JSON.stringify({ 
           success: true, 
           isAuthorized,
-          agentAddress: profile?.agent_wallet_address || agentAddress,
+          agentAddress: profile?.agent_wallet_address,
           authorizedAt: profile?.agent_wallet_authorized_at
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -113,7 +176,7 @@ serve(async (req) => {
     }
 
     if (action === "revoke-authorization") {
-      // Remove agent wallet authorization
+      // Remove agent wallet authorization (but keep the wallet for future use)
       if (!profileId) {
         throw new Error("Missing profileId");
       }
@@ -121,7 +184,6 @@ serve(async (req) => {
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
-          agent_wallet_address: null,
           agent_wallet_authorized_at: null
         })
         .eq("id", profileId);
@@ -134,6 +196,44 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           message: "Agent wallet authorization revoked"
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "get-agent-private-key") {
+      // Get the decrypted private key for trading operations (internal use only)
+      if (!profileId) {
+        throw new Error("Missing profileId");
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("agent_wallet_private_key_encrypted, agent_wallet_authorized_at")
+        .eq("id", profileId)
+        .single();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      if (!profile?.agent_wallet_authorized_at) {
+        throw new Error("Agent wallet not authorized");
+      }
+
+      if (!profile?.agent_wallet_private_key_encrypted) {
+        throw new Error("No agent wallet key found");
+      }
+
+      const privateKey = decryptPrivateKey(profile.agent_wallet_private_key_encrypted);
+      if (!privateKey) {
+        throw new Error("Failed to decrypt agent wallet key");
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          privateKey
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
