@@ -62,14 +62,17 @@ export const TopUpThresholdSetting = ({ onThresholdChange }: TopUpThresholdSetti
     
     setIsSaving(true);
     
-    const { error } = await supabase
-      .from('profiles')
-      .update({ low_balance_threshold: numericValue } as any)
-      .eq('id', profile.id);
+    // Use edge function to bypass RLS (Privy auth doesn't use Supabase auth)
+    const { data, error } = await supabase.functions.invoke('update-profile', {
+      body: {
+        profileId: profile.id,
+        updates: { low_balance_threshold: numericValue }
+      }
+    });
     
     setIsSaving(false);
     
-    if (error) {
+    if (error || !data?.success) {
       toast({
         title: 'Failed to save',
         description: 'Could not update your threshold setting',
