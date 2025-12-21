@@ -71,8 +71,12 @@ const AssetDetail = () => {
         {/* Header */}
         <div className="p-4 safe-top">
           <div className="flex items-center justify-between mb-6">
-            <button onClick={() => navigate(-1)} className="p-2 -ml-2">
-              <ArrowLeft className="w-6 h-6" />
+            <button 
+              onClick={() => navigate(-1)} 
+              className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-6 h-6 text-foreground" />
             </button>
             <div className="flex items-center gap-2">
               {asset.image ? (
@@ -96,7 +100,8 @@ const AssetDetail = () => {
             </div>
             <button 
               onClick={() => refetch()}
-              className="p-2 -mr-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="p-2 -mr-2 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Refresh"
             >
               <RefreshCw className="w-5 h-5" />
             </button>
