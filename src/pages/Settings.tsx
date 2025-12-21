@@ -15,6 +15,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { TopUpThresholdSetting } from '@/components/settings/TopUpThresholdSetting';
 
 interface SettingItemProps {
   icon: React.ElementType;
@@ -157,6 +158,16 @@ const Settings = () => {
               label="Install App" 
               description="Add to home screen"
             />
+          </div>
+        </div>
+
+        {/* DCA Settings Section */}
+        <div>
+          <h3 className="text-sm text-muted-foreground uppercase tracking-wide mb-2 px-1">
+            DCA Settings
+          </h3>
+          <div className="rounded-xl bg-card overflow-hidden">
+            <TopUpThresholdSetting />
           </div>
         </div>
 

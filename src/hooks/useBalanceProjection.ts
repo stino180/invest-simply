@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useWalletData } from './useWalletData';
 import { useDCAPlans, DBDCAPlan } from './useDCAPlans';
+import { usePrivyAuth } from '@/context/PrivyAuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ExecutionProjection {
   totalMonthlyRequired: number;
@@ -11,6 +13,7 @@ interface ExecutionProjection {
   hasCriticalBalance: boolean;
   shortfall: number;
   planBreakdown: PlanProjection[];
+  lowBalanceThreshold: number;
 }
 
 interface PlanProjection {
@@ -22,12 +25,33 @@ interface PlanProjection {
   nextExecution: Date | null;
 }
 
-const LOW_BALANCE_THRESHOLD_WEEKS = 2; // Warn if less than 2 weeks covered
+const DEFAULT_LOW_BALANCE_THRESHOLD = 100;
 const CRITICAL_BALANCE_THRESHOLD_EXECUTIONS = 1; // Critical if can't cover next execution
 
 export const useBalanceProjection = () => {
   const { usdcBalance } = useWalletData();
   const { plans: dbPlans, isLoading: plansLoading } = useDCAPlans();
+  const { profile } = usePrivyAuth();
+  const [lowBalanceThreshold, setLowBalanceThreshold] = useState(DEFAULT_LOW_BALANCE_THRESHOLD);
+
+  // Fetch user's custom threshold
+  useEffect(() => {
+    const fetchThreshold = async () => {
+      if (!profile?.id) return;
+      
+      const { data } = await supabase
+        .from('profiles')
+        .select('low_balance_threshold')
+        .eq('id', profile.id)
+        .single();
+      
+      if (data && (data as any).low_balance_threshold != null) {
+        setLowBalanceThreshold((data as any).low_balance_threshold);
+      }
+    };
+    
+    fetchThreshold();
+  }, [profile?.id]);
 
   const projection = useMemo((): ExecutionProjection => {
     const activePlans = dbPlans.filter(p => p.is_active);
@@ -42,6 +66,7 @@ export const useBalanceProjection = () => {
         hasCriticalBalance: false,
         shortfall: 0,
         planBreakdown: [],
+        lowBalanceThreshold,
       };
     }
 
@@ -69,8 +94,8 @@ export const useBalanceProjection = () => {
     const weeklyRequired = totalMonthlyRequired / 4;
     const weeksCovered = weeklyRequired > 0 ? usdcBalance / weeklyRequired : Infinity;
     
-    // Determine warning states
-    const hasLowBalance = weeksCovered < LOW_BALANCE_THRESHOLD_WEEKS && weeksCovered >= CRITICAL_BALANCE_THRESHOLD_EXECUTIONS;
+    // Determine warning states based on user's custom threshold
+    const hasLowBalance = usdcBalance < lowBalanceThreshold && usdcBalance >= nextExecutionTotal;
     const hasCriticalBalance = usdcBalance < nextExecutionTotal;
     const shortfall = hasCriticalBalance ? nextExecutionTotal - usdcBalance : 0;
 
@@ -83,8 +108,9 @@ export const useBalanceProjection = () => {
       hasCriticalBalance,
       shortfall,
       planBreakdown,
+      lowBalanceThreshold,
     };
-  }, [dbPlans, usdcBalance]);
+  }, [dbPlans, usdcBalance, lowBalanceThreshold]);
 
   return {
     ...projection,
