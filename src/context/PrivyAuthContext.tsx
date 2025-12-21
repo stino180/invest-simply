@@ -10,6 +10,8 @@ interface Profile {
   email: string | null;
   created_at: string;
   updated_at: string;
+  network_mode: 'mainnet' | 'testnet';
+  low_balance_threshold: number | null;
 }
 
 interface PrivyAuthContextType {

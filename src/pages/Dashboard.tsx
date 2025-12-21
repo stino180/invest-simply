@@ -10,7 +10,7 @@ import { useWalletData } from '@/hooks/useWalletData';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
 
 const Dashboard = () => {
-  const { isAuthenticated } = usePrivyAuth();
+  const { isAuthenticated, profile } = usePrivyAuth();
   const { 
     holdings,
     transactions,
@@ -23,6 +23,8 @@ const Dashboard = () => {
     lastSynced,
     hasSynced
   } = useWalletData();
+
+  const isTestnet = profile?.network_mode === 'testnet';
 
   // Auto-sync on first load if authenticated and no cached data
   useEffect(() => {
@@ -37,7 +39,14 @@ const Dashboard = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">Good morning 👋</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">Good morning 👋</p>
+              {isTestnet && (
+                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-500/20 text-yellow-500">
+                  Testnet
+                </span>
+              )}
+            </div>
             <h1 className="text-2xl font-bold font-display text-foreground">Dashboard</h1>
           </div>
           <Link to="/assets">

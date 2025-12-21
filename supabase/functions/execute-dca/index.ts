@@ -21,15 +21,20 @@ interface Profile {
   user_id: string;
   privy_did: string;
   wallet_address: string;
+  network_mode: 'mainnet' | 'testnet';
 }
 
-// Hyperliquid mainnet info endpoint
-const HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info";
-const HYPERLIQUID_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
+// Network URLs
+const MAINNET_INFO_URL = "https://api.hyperliquid.xyz/info";
+const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
+const TESTNET_INFO_URL = "https://api.hyperliquid-testnet.xyz/info";
+const TESTNET_EXCHANGE_URL = "https://api.hyperliquid-testnet.xyz/exchange";
 
 // Get current price from Hyperliquid
-async function getAssetPrice(asset: string): Promise<number> {
-  const response = await fetch(HYPERLIQUID_INFO_URL, {
+async function getAssetPrice(asset: string, networkMode: string): Promise<number> {
+  const infoUrl = networkMode === 'testnet' ? TESTNET_INFO_URL : MAINNET_INFO_URL;
+  
+  const response = await fetch(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -99,8 +104,10 @@ async function executeHyperliquidOrder(
   profile: Profile,
   asset: string,
   amountUsd: number,
-  price: number
+  price: number,
+  networkMode: string
 ): Promise<{ orderId: string; amountCrypto: number }> {
+  const exchangeUrl = networkMode === 'testnet' ? TESTNET_EXCHANGE_URL : MAINNET_EXCHANGE_URL;
   const amountCrypto = amountUsd / price;
   
   // Hyperliquid order action
@@ -128,7 +135,7 @@ async function executeHyperliquidOrder(
   );
 
   // Submit to Hyperliquid
-  const response = await fetch(HYPERLIQUID_EXCHANGE_URL, {
+  const response = await fetch(exchangeUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -210,7 +217,7 @@ serve(async (req) => {
       .from("dca_plans")
       .select(`
         *,
-        profiles!inner(id, user_id, privy_did, wallet_address)
+        profiles!inner(id, user_id, privy_did, wallet_address, network_mode)
       `)
       .eq("is_active", true)
       .lte("next_execution_at", now);
@@ -233,10 +240,11 @@ serve(async (req) => {
       }
 
       try {
-        console.log(`Executing DCA for plan ${plan.id}: ${plan.amount_usd} USD -> ${plan.asset}`);
+        const networkMode = profile.network_mode || 'mainnet';
+        console.log(`Executing DCA for plan ${plan.id}: ${plan.amount_usd} USD -> ${plan.asset} (${networkMode})`);
 
         // Get current price
-        const price = await getAssetPrice(plan.asset);
+        const price = await getAssetPrice(plan.asset, networkMode);
         console.log(`Current ${plan.asset} price: $${price}`);
 
         // Execute order via Hyperliquid
@@ -244,7 +252,8 @@ serve(async (req) => {
           profile,
           plan.asset,
           plan.amount_usd,
-          price
+          price,
+          networkMode
         );
 
         // Record execution

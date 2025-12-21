@@ -16,6 +16,7 @@ import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { TopUpThresholdSetting } from '@/components/settings/TopUpThresholdSetting';
+import { NetworkToggle } from '@/components/settings/NetworkToggle';
 
 interface SettingItemProps {
   icon: React.ElementType;
@@ -168,6 +169,7 @@ const Settings = () => {
           </h3>
           <div className="rounded-xl bg-card overflow-hidden">
             <TopUpThresholdSetting />
+            <NetworkToggle />
           </div>
         </div>
 

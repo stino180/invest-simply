@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { usePrivyAuth } from '@/context/PrivyAuthContext';
 
 export interface CryptoAsset {
   id: string;
@@ -13,16 +14,21 @@ export interface CryptoAsset {
 }
 
 export const useCryptoPrices = () => {
+  const { profile } = usePrivyAuth();
   const [assets, setAssets] = useState<CryptoAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const networkMode = profile?.network_mode || 'mainnet';
 
   const fetchPrices = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const { data, error: fnError } = await supabase.functions.invoke('fetch-crypto-prices');
+      const { data, error: fnError } = await supabase.functions.invoke('fetch-crypto-prices', {
+        body: { networkMode }
+      });
 
       if (fnError) {
         throw new Error(fnError.message);
@@ -47,7 +53,7 @@ export const useCryptoPrices = () => {
     // Refresh every 30 seconds
     const interval = setInterval(fetchPrices, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [networkMode]);
 
-  return { assets, isLoading, error, refetch: fetchPrices };
+  return { assets, isLoading, error, refetch: fetchPrices, networkMode };
 };
