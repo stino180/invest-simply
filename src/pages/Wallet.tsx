@@ -92,7 +92,7 @@ const Wallet = () => {
           )}
           
           <div className="flex items-center gap-2">
-            <code className="flex-1 p-3 bg-secondary rounded-lg text-sm font-mono truncate">
+            <code className="flex-1 p-3 bg-secondary rounded-lg text-sm font-mono truncate text-foreground">
               {walletAddress}
             </code>
             <button

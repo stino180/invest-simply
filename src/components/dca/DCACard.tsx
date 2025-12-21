@@ -39,7 +39,7 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
             {plan.icon}
           </div>
           <div>
-            <div className="font-semibold">{plan.symbol}</div>
+            <div className="font-semibold text-foreground">{plan.symbol}</div>
             <div className="text-sm text-muted-foreground">{plan.name}</div>
           </div>
         </div>
@@ -72,21 +72,21 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <span className="text-muted-foreground">Amount</span>
-          <div className="font-semibold">${plan.amount}</div>
+          <div className="font-semibold text-foreground">${plan.amount}</div>
         </div>
         <div>
           <span className="text-muted-foreground">Frequency</span>
-          <div className="font-semibold">{formatFrequency(plan.frequency)}</div>
+          <div className="font-semibold text-foreground">{formatFrequency(plan.frequency)}</div>
         </div>
         <div>
           <span className="text-muted-foreground">Next buy</span>
-          <div className="font-semibold">
+          <div className="font-semibold text-foreground">
             {plan.isActive ? formatDate(plan.nextExecution) : 'Paused'}
           </div>
         </div>
         <div>
           <span className="text-muted-foreground">Total invested</span>
-          <div className="font-semibold">${plan.totalInvested.toLocaleString()}</div>
+          <div className="font-semibold text-foreground">${plan.totalInvested.toLocaleString()}</div>
         </div>
       </div>
     </div>

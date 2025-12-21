@@ -217,7 +217,7 @@ export const RampModal = ({ open, onOpenChange, mode, walletAddress }: RampModal
             <p className="text-muted-foreground mb-1">
               {isOnramp ? 'Funds will be sent to:' : 'Funds will be withdrawn from:'}
             </p>
-            <code className="text-xs font-mono break-all">{walletAddress}</code>
+            <code className="text-xs font-mono break-all text-foreground">{walletAddress}</code>
           </div>
 
           {/* ZKP2P info */}

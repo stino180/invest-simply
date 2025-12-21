@@ -68,14 +68,14 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
             <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center mx-auto mb-4 animate-scale-in">
               <Check className="w-8 h-8 text-success" />
             </div>
-            <h3 className="text-xl font-bold mb-2">DCA Plan Created!</h3>
+            <h3 className="text-xl font-bold mb-2 text-foreground">DCA Plan Created!</h3>
             <p className="text-muted-foreground">
               Auto-buying ${numAmount} of {selectedAsset.symbol} {frequency}
             </p>
           </div>
         ) : (
           <>
-            <h3 className="text-xl font-bold mb-6">Create DCA Plan</h3>
+            <h3 className="text-xl font-bold mb-6 text-foreground">Create DCA Plan</h3>
 
             {/* Asset Selector */}
             <div className="mb-4">
@@ -91,7 +91,7 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
                     {selectedAsset.icon}
                   </div>
                   <div className="text-left">
-                    <div className="font-semibold">{selectedAsset.symbol}</div>
+                    <div className="font-semibold text-foreground">{selectedAsset.symbol}</div>
                     <div className="text-sm text-muted-foreground">{selectedAsset.name}</div>
                   </div>
                 </div>
@@ -119,10 +119,10 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
                         {asset.icon}
                       </div>
                       <div className="text-left flex-1">
-                        <div className="font-medium text-sm">{asset.symbol}</div>
+                        <div className="font-medium text-sm text-foreground">{asset.symbol}</div>
                         <div className="text-xs text-muted-foreground">{asset.name}</div>
                       </div>
-                      <div className="text-sm font-medium">{formatPrice(asset.price)}</div>
+                      <div className="text-sm font-medium text-foreground">{formatPrice(asset.price)}</div>
                     </button>
                   ))}
                 </div>
@@ -142,7 +142,7 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full h-14 pl-10 pr-4 text-2xl font-bold bg-secondary rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors"
+                  className="w-full h-14 pl-10 pr-4 text-2xl font-bold text-foreground bg-secondary rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors"
                   placeholder="0"
                 />
               </div>
@@ -156,7 +156,7 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
                       'flex-1 py-2 rounded-lg text-sm font-medium transition-all',
                       amount === preset.toString()
                         ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary hover:bg-secondary/80'
+                        : 'bg-secondary text-foreground hover:bg-secondary/80'
                     )}
                   >
                     ${preset}
@@ -179,7 +179,7 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
                       'py-3 rounded-xl text-sm font-medium transition-all',
                       frequency === freq.value
                         ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary hover:bg-secondary/80'
+                        : 'bg-secondary text-foreground hover:bg-secondary/80'
                     )}
                   >
                     {freq.label}

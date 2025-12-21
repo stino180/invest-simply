@@ -81,7 +81,7 @@ export const TransactionList = ({ transactions, limit }: TransactionListProps) =
               {getTransactionIcon(tx.type)}
             </div>
             <div>
-              <div className="font-semibold">{getTransactionLabel(tx)}</div>
+              <div className="font-semibold text-foreground">{getTransactionLabel(tx)}</div>
               <div className="text-sm text-muted-foreground">
                 {formatDate(tx.timestamp)}
               </div>
@@ -90,7 +90,7 @@ export const TransactionList = ({ transactions, limit }: TransactionListProps) =
           
           <div className="text-right">
             <div className={cn(
-              'font-semibold',
+              'font-semibold text-foreground',
               tx.type === 'deposit' && 'text-success',
               tx.type === 'withdraw' && 'text-destructive'
             )}>
