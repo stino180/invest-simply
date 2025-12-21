@@ -335,7 +335,16 @@ serve(async (req) => {
     const signature = await signTypedDataWithAgentWallet(agentWallet.privateKey, typedData);
     const tradingAddress = agentWallet.address;
 
-    // Submit to Hyperliquid
+    // Submit to Hyperliquid - include the user's main wallet address
+    // The agent wallet signs on behalf of the user's main wallet
+    const userWalletAddress = typedProfile.wallet_address;
+    
+    if (!userWalletAddress) {
+      throw new Error("User wallet address not found");
+    }
+    
+    console.log(`User wallet: ${userWalletAddress}, Agent wallet: ${tradingAddress}`);
+
     const requestBody = {
       action,
       nonce: timestamp,
@@ -344,7 +353,7 @@ serve(async (req) => {
         s: "0x" + signature.slice(66, 130),
         v: parseInt(signature.slice(130, 132), 16)
       },
-      vaultAddress: null
+      vaultAddress: userWalletAddress // The user's main wallet that the agent is acting for
     };
 
     console.log("Submitting spot order to Hyperliquid...");
