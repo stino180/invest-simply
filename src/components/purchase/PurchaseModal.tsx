@@ -121,9 +121,24 @@ export const PurchaseModal = ({
             {error && (
               <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-2">
                 <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">
-                  {error instanceof Error ? error.message : 'Purchase failed'}
-                </p>
+                <div className="text-sm text-destructive">
+                  <p>
+                    {error instanceof Error ? error.message : 'Purchase failed'}
+                  </p>
+                  {error instanceof Error &&
+                    error.message.includes('Agent wallet not authorized') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          window.location.assign('/wallet');
+                        }}
+                        className="mt-2 underline underline-offset-4"
+                      >
+                        Go to Wallet to authorize
+                      </button>
+                    )}
+                </div>
               </div>
             )}
 
