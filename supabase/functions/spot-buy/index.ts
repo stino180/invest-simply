@@ -27,16 +27,16 @@ const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
 const TESTNET_INFO_URL = "https://api.hyperliquid-testnet.xyz/info";
 const TESTNET_EXCHANGE_URL = "https://api.hyperliquid-testnet.xyz/exchange";
 
-// Asset metadata mapping - spot assets have different indices
-const SPOT_ASSET_META: Record<string, { tokenId: number; szDecimals: number }> = {
-  BTC: { tokenId: 1, szDecimals: 5 },
-  ETH: { tokenId: 2, szDecimals: 4 },
-  SOL: { tokenId: 5, szDecimals: 2 },
-  DOGE: { tokenId: 4, szDecimals: 0 },
-  AVAX: { tokenId: 7, szDecimals: 2 },
-  LINK: { tokenId: 6, szDecimals: 2 },
-  HYPE: { tokenId: 3, szDecimals: 2 },
-  PURR: { tokenId: 8, szDecimals: 0 },
+// Size decimals for common perps (fallback if meta lookup doesn't include size decimals)
+const PERP_SZ_DECIMALS: Record<string, number> = {
+  BTC: 5,
+  ETH: 4,
+  SOL: 2,
+  DOGE: 0,
+  AVAX: 2,
+  LINK: 2,
+  HYPE: 2,
+  PURR: 0,
 };
 
 // Decrypt the stored private key
@@ -100,54 +100,50 @@ async function ensureAgentWallet(
 async function getSpotPrice(asset: string, networkMode: string): Promise<number> {
   const infoUrl = networkMode === "testnet" ? TESTNET_INFO_URL : MAINNET_INFO_URL;
 
-  // Get spot meta and asset contexts
-  const response = await fetch(infoUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "spotMeta" }),
-  });
-
-  if (!response.ok) {
-    // Fallback to allMids for price data
-    const midsResponse = await fetch(infoUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "allMids" }),
-    });
-
-    if (!midsResponse.ok) {
-      throw new Error(`Failed to fetch prices: ${midsResponse.statusText}`);
-    }
-
-    const midsData = await midsResponse.json();
-    const price = midsData[asset];
-
-    if (!price) {
-      throw new Error(`Asset ${asset} not found`);
-    }
-
-    return parseFloat(price);
-  }
-
-  // Try to get spot-specific price
-  const data = await response.json();
-  console.log("Spot meta response:", JSON.stringify(data).slice(0, 500));
-
-  // Fallback to allMids
+  // Just use allMids for now (these are the mids shown in our UI)
   const midsResponse = await fetch(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: "allMids" }),
   });
 
+  if (!midsResponse.ok) {
+    throw new Error(`Failed to fetch prices: ${midsResponse.statusText}`);
+  }
+
   const midsData = await midsResponse.json();
   const price = midsData[asset];
 
   if (!price) {
-    throw new Error(`Asset ${asset} not found on Hyperliquid`);
+    throw new Error(`Asset ${asset} not found`);
   }
 
   return parseFloat(price);
+}
+
+// Perps use meta.universe index as the asset id
+async function getPerpAssetId(asset: string, networkMode: string): Promise<number> {
+  const infoUrl = networkMode === "testnet" ? TESTNET_INFO_URL : MAINNET_INFO_URL;
+
+  const metaResponse = await fetch(infoUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "meta" }),
+  });
+
+  if (!metaResponse.ok) {
+    throw new Error(`Failed to fetch meta: ${metaResponse.statusText}`);
+  }
+
+  const meta = await metaResponse.json();
+  const universe: Array<{ name: string }> = meta?.universe ?? [];
+  const idx = universe.findIndex((u) => u.name === asset);
+
+  if (idx < 0) {
+    throw new Error(`Unsupported asset for trading: ${asset}`);
+  }
+
+  return idx;
 }
 
 function formatSize(size: number, szDecimals: number): string {
@@ -164,7 +160,8 @@ function hexToRsv(signatureHex: string): { r: string; s: string; v: number } {
   const sig = signatureHex.startsWith("0x") ? signatureHex.slice(2) : signatureHex;
   const r = `0x${sig.slice(0, 64)}`;
   const s = `0x${sig.slice(64, 128)}`;
-  const v = parseInt(sig.slice(128, 130), 16); // viem returns 0/1 yParity
+  // viem returns yParity (0/1) as the final byte; Hyperliquid expects 27/28
+  const v = parseInt(sig.slice(128, 130), 16) + 27;
   return { r, s, v };
 }
 
@@ -280,37 +277,38 @@ serve(async (req) => {
     const currentPrice = await getSpotPrice(asset, networkMode);
     console.log(`Current ${asset} price: $${currentPrice}`);
 
-    // Get asset metadata
-    const assetMeta = SPOT_ASSET_META[asset];
-    if (!assetMeta) {
-      throw new Error(`Asset ${asset} not supported for spot trading`);
-    }
+    // Resolve perp asset id + size decimals
+    const perpAssetId = await getPerpAssetId(asset, networkMode);
+    const szDecimals = PERP_SZ_DECIMALS[asset] ?? 4;
 
     // Calculate size and limit price
     const amountCrypto = amountUsd / currentPrice;
     const slippageMultiplier = 1 + (slippage / 100);
     const limitPrice = currentPrice * slippageMultiplier;
-    
-    const formattedSize = formatSize(amountCrypto, assetMeta.szDecimals);
+
+    const formattedSize = formatSize(amountCrypto, szDecimals);
     const formattedPrice = formatPrice(limitPrice);
 
-    console.log(`Placing spot order: ${formattedSize} ${asset} @ ${formattedPrice} (market: ${currentPrice})`);
+    console.log(
+      `Placing order: assetId=${perpAssetId} ${formattedSize} ${asset} @ ${formattedPrice} (market: ${currentPrice})`
+    );
 
     const timestamp = Date.now();
-    
-    // Build spot order action
-    // For spot, we use the spot order format
+
+    // Perp order action (meta.universe index)
     const action = {
       type: "order",
-      orders: [{
-        a: assetMeta.tokenId,
-        b: true, // isBuy
-        p: formattedPrice,
-        s: formattedSize,
-        r: false, // reduceOnly
-        t: { limit: { tif: "Ioc" } } // Immediate-or-cancel
-      }],
-      grouping: "na"
+      orders: [
+        {
+          a: perpAssetId,
+          b: true, // isBuy
+          p: formattedPrice,
+          s: formattedSize,
+          r: false, // reduceOnly
+          t: { limit: { tif: "Ioc" } },
+        },
+      ],
+      grouping: "na",
     };
 
     // Sign & submit as a Hyperliquid L1 action (SDK-style signing)
