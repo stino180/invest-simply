@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { keccak256, stringToHex } from "https://esm.sh/viem@2.21.0";
-import { privateKeyToAccount } from "https://esm.sh/viem@2.21.0/accounts";
+import { privateKeyToAccount, generatePrivateKey } from "https://esm.sh/viem@2.21.0/accounts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,6 +49,50 @@ function decryptPrivateKey(encrypted: string): string | null {
   } catch {
     return null;
   }
+}
+
+// Encrypt a private key for storage
+function encryptPrivateKey(privateKey: string): string {
+  const salt = crypto.randomUUID();
+  return btoa(`${salt}:${privateKey}`);
+}
+
+// Generate a new agent wallet and store it in the profile
+async function ensureAgentWallet(
+  supabase: any,
+  profile: Profile
+): Promise<{ address: string; privateKey: string }> {
+  // If already has an agent wallet, decrypt and return it
+  if (profile.agent_wallet_private_key_encrypted && profile.agent_wallet_address) {
+    const privateKey = decryptPrivateKey(profile.agent_wallet_private_key_encrypted);
+    if (privateKey) {
+      console.log(`Using existing agent wallet: ${profile.agent_wallet_address}`);
+      return { address: profile.agent_wallet_address, privateKey };
+    }
+  }
+
+  // Generate new agent wallet
+  console.log("Generating new agent wallet for user...");
+  const newPrivateKey = generatePrivateKey();
+  const account = privateKeyToAccount(newPrivateKey);
+  const encryptedKey = encryptPrivateKey(newPrivateKey);
+
+  // Store in profile
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      agent_wallet_address: account.address as string,
+      agent_wallet_private_key_encrypted: encryptedKey,
+      agent_wallet_authorized_at: new Date().toISOString()
+    })
+    .eq("id", profile.id);
+
+  if (updateError) {
+    throw new Error(`Failed to store agent wallet: ${updateError.message}`);
+  }
+
+  console.log(`Created new agent wallet: ${account.address}`);
+  return { address: account.address, privateKey: newPrivateKey };
 }
 
 // Get current price from Hyperliquid
@@ -244,20 +288,8 @@ serve(async (req) => {
     const isMainnet = networkMode === 'mainnet';
     const exchangeUrl = isMainnet ? MAINNET_EXCHANGE_URL : TESTNET_EXCHANGE_URL;
 
-    // Check if using external wallet with agent
-    const isExternalWallet = typedProfile.wallet_type === 'external';
-    
-    if (isExternalWallet) {
-      // External wallet needs authorized agent
-      if (!typedProfile.agent_wallet_private_key_encrypted) {
-        throw new Error("Agent wallet not configured. Please authorize an agent wallet first.");
-      }
-    } else {
-      // Privy wallet needs privy_did
-      if (!typedProfile.privy_did || !typedProfile.wallet_address) {
-        throw new Error("Wallet not properly configured");
-      }
-    }
+    // Ensure user has an agent wallet (create one if needed)
+    const agentWallet = await ensureAgentWallet(supabase, typedProfile);
 
     // Get current price
     const currentPrice = await getSpotPrice(asset, networkMode);
@@ -299,25 +331,9 @@ serve(async (req) => {
     // Build typed data
     const typedData = buildOrderTypedData(action, timestamp, isMainnet);
     
-    // Sign with appropriate method
-    let signature: string;
-    let tradingAddress: string;
-    
-    if (isExternalWallet) {
-      const privateKey = decryptPrivateKey(typedProfile.agent_wallet_private_key_encrypted!);
-      if (!privateKey) {
-        throw new Error("Failed to decrypt agent wallet key");
-      }
-      signature = await signTypedDataWithAgentWallet(privateKey, typedData);
-      tradingAddress = typedProfile.agent_wallet_address!;
-    } else {
-      signature = await signTypedDataWithPrivy(
-        typedProfile.privy_did,
-        typedProfile.wallet_address,
-        typedData
-      );
-      tradingAddress = typedProfile.wallet_address;
-    }
+    // Sign with agent wallet
+    const signature = await signTypedDataWithAgentWallet(agentWallet.privateKey, typedData);
+    const tradingAddress = agentWallet.address;
 
     // Submit to Hyperliquid
     const requestBody = {
