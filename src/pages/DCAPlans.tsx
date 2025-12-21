@@ -31,6 +31,7 @@ const DCAPlans = () => {
     executionTime: string;
     timezone: string;
     specificDays?: string[];
+    slippage: number;
   }) => {
     const mockAsset = { btc: { symbol: 'BTC', name: 'Bitcoin', icon: '₿' }, eth: { symbol: 'ETH', name: 'Ethereum', icon: 'Ξ' }, sol: { symbol: 'SOL', name: 'Solana', icon: '◎' } };
     const assetInfo = mockAsset[newPlan.assetId as keyof typeof mockAsset] || { symbol: newPlan.assetId.toUpperCase(), name: newPlan.assetId, icon: '₿' };
@@ -51,6 +52,7 @@ const DCAPlans = () => {
       executionTime: newPlan.executionTime,
       timezone: newPlan.timezone,
       specificDays: newPlan.specificDays,
+      slippage: newPlan.slippage,
     };
     setPlans([...plans, mockNew]);
   };

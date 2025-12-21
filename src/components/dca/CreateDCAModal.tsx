@@ -1,18 +1,11 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronDown, Check, Loader2, Clock, Calendar } from 'lucide-react';
+import { X, ChevronDown, Check, Loader2, Clock, Calendar, Settings2 } from 'lucide-react';
 import { mockAssets, Asset, formatPrice } from '@/data/mockAssets';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-
-interface ScheduleConfig {
-  type: 'preset' | 'custom' | 'calendar';
-  frequency: string;
-  customDays?: number;
-  executionTime: string;
-  timezone: string;
-  specificDays: string[];
-}
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface CreateDCAModalProps {
   isOpen: boolean;
@@ -25,8 +18,11 @@ interface CreateDCAModalProps {
     executionTime: string;
     timezone: string;
     specificDays?: string[];
+    slippage: number;
   }) => void;
 }
+
+const slippagePresets = [0.1, 0.5, 1.0, 2.0];
 
 const presetFrequencies = [
   { value: 'daily', label: 'Daily' },
@@ -69,9 +65,15 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
   const [executionTime, setExecutionTime] = useState('09:00');
   const [timezone, setTimezone] = useState(getUserTimezone());
   const [selectedDays, setSelectedDays] = useState<string[]>(['monday']);
+  
+  // Advanced settings
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [slippage, setSlippage] = useState('0.5');
+  const [customSlippage, setCustomSlippage] = useState(false);
 
   const numAmount = parseFloat(amount) || 0;
   const numCustomDays = parseInt(customDays) || 1;
+  const numSlippage = parseFloat(slippage) || 0.5;
 
   // Auto-detect timezone on mount
   useEffect(() => {
@@ -123,6 +125,7 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
         executionTime,
         timezone,
         specificDays: scheduleType === 'calendar' ? selectedDays : undefined,
+        slippage: numSlippage,
       });
       setIsSuccess(false);
       setAmount('50');
@@ -130,6 +133,8 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
       setScheduleType('preset');
       setCustomDays('3');
       setSelectedDays(['monday']);
+      setSlippage('0.5');
+      setShowAdvanced(false);
       onClose();
     }, 1500);
   };
@@ -143,7 +148,7 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
         onClick={onClose}
       />
       
-      <div className="relative w-full max-w-md bg-card rounded-t-3xl sm:rounded-2xl p-6 animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-md bg-card rounded-t-3xl sm:rounded-2xl p-6 pb-8 animate-slide-up shadow-2xl max-h-[85vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute right-4 top-4 p-2 rounded-full hover:bg-secondary transition-colors"
@@ -371,30 +376,104 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
               </div>
             )}
 
-            {/* Execution Time */}
-            <div className="mb-4">
-              <label className="text-sm text-muted-foreground mb-2 block">
-                Execution Time
-              </label>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <Input
-                    type="time"
-                    value={executionTime}
-                    onChange={(e) => setExecutionTime(e.target.value)}
-                    className="text-foreground bg-secondary border-transparent focus:border-primary"
-                  />
-                </div>
-                <div className="flex-1">
-                  <div className="h-10 px-3 flex items-center bg-secondary rounded-md text-sm text-muted-foreground truncate">
-                    {timezone}
+            {/* Advanced Toggle */}
+            <div className="flex items-center justify-between mb-4 p-3 bg-secondary/50 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-muted-foreground" />
+                <Label htmlFor="advanced-mode" className="text-sm font-medium text-foreground cursor-pointer">
+                  Advanced Settings
+                </Label>
+              </div>
+              <Switch
+                id="advanced-mode"
+                checked={showAdvanced}
+                onCheckedChange={setShowAdvanced}
+              />
+            </div>
+
+            {/* Advanced Settings Section */}
+            {showAdvanced && (
+              <div className="mb-4 space-y-4 p-4 bg-secondary/30 rounded-xl border border-border/50">
+                {/* Execution Time */}
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">
+                    Execution Time
+                  </label>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <Input
+                        type="time"
+                        value={executionTime}
+                        onChange={(e) => setExecutionTime(e.target.value)}
+                        className="text-foreground bg-secondary border-transparent focus:border-primary"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-10 px-3 flex items-center bg-secondary rounded-md text-sm text-muted-foreground truncate">
+                        {timezone}
+                      </div>
+                    </div>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Timezone auto-detected from your browser
+                  </p>
+                </div>
+
+                {/* Slippage Tolerance */}
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">
+                    Slippage Tolerance
+                  </label>
+                  <div className="flex gap-2 mb-2">
+                    {slippagePresets.map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => {
+                          setSlippage(preset.toString());
+                          setCustomSlippage(false);
+                        }}
+                        className={cn(
+                          'flex-1 py-2 rounded-lg text-sm font-medium transition-all',
+                          slippage === preset.toString() && !customSlippage
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-secondary text-foreground hover:bg-secondary/80'
+                        )}
+                      >
+                        {preset}%
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setCustomSlippage(true)}
+                      className={cn(
+                        'flex-1 py-2 rounded-lg text-sm font-medium transition-all',
+                        customSlippage
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary text-foreground hover:bg-secondary/80'
+                      )}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                  {customSlippage && (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        max="10"
+                        value={slippage}
+                        onChange={(e) => setSlippage(e.target.value)}
+                        className="w-24 text-center text-foreground bg-secondary border-transparent focus:border-primary"
+                      />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Maximum price difference you're willing to accept. Default 0.5% works for most trades.
+                  </p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Timezone auto-detected from your browser
-              </p>
-            </div>
+            )}
 
             {/* Summary */}
             <div className="p-4 bg-secondary/50 rounded-xl mb-6">
@@ -402,6 +481,11 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
                 You'll automatically invest <span className="font-semibold text-foreground">${numAmount}</span> into{' '}
                 <span className="font-semibold text-foreground">{selectedAsset.symbol}</span>{' '}
                 {getScheduleSummary()}
+                {showAdvanced && (
+                  <span className="block mt-1 text-xs">
+                    Max slippage: {numSlippage}%
+                  </span>
+                )}
               </p>
             </div>
 

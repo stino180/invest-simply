@@ -107,13 +107,22 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
         </div>
       </div>
 
-      {/* Execution time display */}
-      {plan.executionTime && (
-        <div className="mt-3 pt-3 border-t border-border flex items-center gap-2 text-xs text-muted-foreground">
-          <Clock className="w-3.5 h-3.5" />
-          <span>Executes at {plan.executionTime}</span>
-          {plan.timezone && (
-            <span className="text-muted-foreground/60">({plan.timezone})</span>
+      {/* Execution details */}
+      {(plan.executionTime || plan.slippage) && (
+        <div className="mt-3 pt-3 border-t border-border flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {plan.executionTime && (
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              <span>{plan.executionTime}</span>
+              {plan.timezone && (
+                <span className="text-muted-foreground/60">({plan.timezone})</span>
+              )}
+            </div>
+          )}
+          {plan.slippage && (
+            <div className="flex items-center gap-1.5">
+              <span>Slippage: {plan.slippage}%</span>
+            </div>
           )}
         </div>
       )}

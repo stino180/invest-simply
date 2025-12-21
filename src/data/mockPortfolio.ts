@@ -37,6 +37,8 @@ export interface DCAplan {
   executionTime?: string;
   timezone?: string;
   specificDays?: string[];
+  // Trade settings
+  slippage?: number;
 }
 
 export const mockPortfolio: PortfolioHolding[] = [
