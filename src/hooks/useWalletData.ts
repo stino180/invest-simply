@@ -20,6 +20,19 @@ export interface WalletBalance {
   last_synced_at: string;
 }
 
+export interface WalletTransaction {
+  id: string;
+  type: 'buy' | 'sell' | 'deposit' | 'withdraw';
+  asset: string | null;
+  symbol: string | null;
+  amount: number | null;
+  price: number | null;
+  total: number;
+  timestamp: string;
+  status: string;
+  hyperliquid_tx_hash: string | null;
+}
+
 export const useWalletData = () => {
   const { profile, isAuthenticated, walletAddress } = usePrivyAuth();
   const queryClient = useQueryClient();
@@ -68,6 +81,27 @@ export const useWalletData = () => {
     enabled: isAuthenticated && !!profile?.id,
   });
 
+  // Fetch cached transactions from database
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
+    queryKey: ['wallet-transactions', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return [];
+
+      const { data, error } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching transactions:', error);
+        return [];
+      }
+
+      return data as WalletTransaction[];
+    },
+    enabled: isAuthenticated && !!profile?.id,
+  });
+
   // Sync with Hyperliquid
   const syncMutation = useMutation({
     mutationFn: async () => {
@@ -90,6 +124,7 @@ export const useWalletData = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['wallet-holdings'] });
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
       toast.success('Wallet synced successfully');
     },
     onError: (error) => {
@@ -122,10 +157,11 @@ export const useWalletData = () => {
   return {
     holdings,
     balance,
+    transactions,
     totalValue,
     usdcBalance,
     portfolioChange,
-    isLoading: holdingsLoading || balanceLoading,
+    isLoading: holdingsLoading || balanceLoading || transactionsLoading,
     isSyncing,
     syncWallet,
     lastSynced: balance?.last_synced_at,

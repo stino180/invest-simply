@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Copy, Check, Plus, ArrowUpRight, QrCode } from 'lucide-react';
+import { Copy, Check, Plus, ArrowUpRight, QrCode, RefreshCw } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { TransactionList } from '@/components/transactions/TransactionList';
 import { RampModal } from '@/components/ramp/RampModal';
-import { mockTransactions, mockBalance } from '@/data/mockPortfolio';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
+import { useWalletData } from '@/hooks/useWalletData';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -16,12 +16,12 @@ const paymentMethods = [
 
 const Wallet = () => {
   const { walletAddress: userWallet } = usePrivyAuth();
+  const { transactions, usdcBalance, isSyncing, syncWallet } = useWalletData();
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [rampMode, setRampMode] = useState<'onramp' | 'offramp' | null>(null);
 
   const walletAddress = userWallet || '0x742d...8cB2a';
-  const shortAddress = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -42,7 +42,7 @@ const Wallet = () => {
         <div className="p-6 rounded-2xl gradient-card shadow-glow">
           <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
           <h2 className="text-4xl font-bold font-display mb-4 text-foreground">
-            ${mockBalance.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </h2>
           
           <div className="flex gap-3">
@@ -146,8 +146,26 @@ const Wallet = () => {
 
         {/* Transaction History */}
         <div>
-          <h3 className="font-semibold mb-3 text-foreground">Recent Transactions</h3>
-          <TransactionList transactions={mockTransactions} limit={5} />
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-foreground">Recent Transactions</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={syncWallet}
+              disabled={isSyncing}
+              className="h-8 px-2"
+            >
+              <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+            </Button>
+          </div>
+          {transactions.length > 0 ? (
+            <TransactionList transactions={transactions} limit={10} />
+          ) : (
+            <div className="p-8 text-center text-muted-foreground rounded-xl bg-card">
+              <p>No transactions yet</p>
+              <p className="text-sm mt-1">Your transaction history will appear here after syncing</p>
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

@@ -19,6 +19,33 @@ interface SpotClearinghouseState {
   balances: SpotBalance[];
 }
 
+interface SpotTransfer {
+  time: number;
+  coin: string;
+  usdc: string;
+  amount: string;
+  fee: string;
+  hash: string;
+  direction: string; // "deposit" or "withdraw"
+}
+
+interface SpotFill {
+  time: number;
+  coin: string;
+  px: string;
+  sz: string;
+  side: string; // "B" for buy, "A" for sell
+  startPosition: string;
+  dir: string;
+  closedPnl: string;
+  hash: string;
+  oid: number;
+  crossed: boolean;
+  fee: string;
+  tid: number;
+  feeToken: string;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -71,6 +98,40 @@ serve(async (req) => {
       console.log('Prices fetched:', Object.keys(prices).length, 'assets');
     }
 
+    // Fetch spot transfers (deposits/withdrawals)
+    const transfersResponse = await fetch(HYPERLIQUID_INFO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'spotTransferHistory',
+        user: walletAddress
+      })
+    });
+
+    let transfers: SpotTransfer[] = [];
+    if (transfersResponse.ok) {
+      transfers = await transfersResponse.json();
+      console.log('Transfers fetched:', transfers.length);
+    }
+
+    // Fetch spot fills (trades)
+    const fillsResponse = await fetch(HYPERLIQUID_INFO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'userFillsByTime',
+        user: walletAddress,
+        startTime: Date.now() - 90 * 24 * 60 * 60 * 1000, // Last 90 days
+        endTime: Date.now()
+      })
+    });
+
+    let fills: SpotFill[] = [];
+    if (fillsResponse.ok) {
+      fills = await fillsResponse.json();
+      console.log('Fills fetched:', fills.length);
+    }
+
     // Process balances
     const holdings: Array<{
       asset: string;
@@ -111,6 +172,59 @@ serve(async (req) => {
     }
 
     console.log(`Processed ${holdings.length} holdings, USDC: ${usdcBalance}, Total: ${totalValue}`);
+
+    // Process transactions
+    const transactions: Array<{
+      user_id: string;
+      type: string;
+      asset: string | null;
+      symbol: string | null;
+      amount: number | null;
+      price: number | null;
+      total: number;
+      timestamp: string;
+      status: string;
+      hyperliquid_tx_hash: string | null;
+    }> = [];
+
+    // Process transfers as deposit/withdraw transactions
+    for (const transfer of transfers) {
+      const usdcAmount = parseFloat(transfer.usdc);
+      transactions.push({
+        user_id: profileId,
+        type: transfer.direction === 'deposit' ? 'deposit' : 'withdraw',
+        asset: transfer.coin || 'USDC',
+        symbol: transfer.coin || 'USDC',
+        amount: parseFloat(transfer.amount) || usdcAmount,
+        price: null,
+        total: Math.abs(usdcAmount),
+        timestamp: new Date(transfer.time).toISOString(),
+        status: 'completed',
+        hyperliquid_tx_hash: transfer.hash
+      });
+    }
+
+    // Process fills as buy/sell transactions
+    for (const fill of fills) {
+      const price = parseFloat(fill.px);
+      const size = parseFloat(fill.sz);
+      const total = price * size;
+      
+      transactions.push({
+        user_id: profileId,
+        type: fill.side === 'B' ? 'buy' : 'sell',
+        asset: fill.coin,
+        symbol: fill.coin,
+        amount: size,
+        price: price,
+        total: total,
+        timestamp: new Date(fill.time).toISOString(),
+        status: 'completed',
+        hyperliquid_tx_hash: fill.hash
+      });
+    }
+
+    console.log(`Processed ${transactions.length} transactions`);
 
     // Clear existing holdings for this user
     await supabase
@@ -153,6 +267,22 @@ serve(async (req) => {
       console.error('Balance upsert error:', balanceError);
     }
 
+    // Clear existing transactions and insert new ones
+    await supabase
+      .from('wallet_transactions')
+      .delete()
+      .eq('user_id', profileId);
+
+    if (transactions.length > 0) {
+      const { error: txError } = await supabase
+        .from('wallet_transactions')
+        .insert(transactions);
+
+      if (txError) {
+        console.error('Transactions insert error:', txError);
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       holdings,
@@ -160,6 +290,7 @@ serve(async (req) => {
         usdc_balance: usdcBalance,
         total_value_usd: totalValue
       },
+      transactions: transactions.length,
       last_synced_at: new Date().toISOString()
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

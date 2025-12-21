@@ -217,6 +217,62 @@ export type Database = {
           },
         ]
       }
+      wallet_transactions: {
+        Row: {
+          amount: number | null
+          asset: string | null
+          created_at: string
+          hyperliquid_tx_hash: string | null
+          id: string
+          price: number | null
+          status: string
+          symbol: string | null
+          timestamp: string
+          total: number
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          asset?: string | null
+          created_at?: string
+          hyperliquid_tx_hash?: string | null
+          id?: string
+          price?: number | null
+          status?: string
+          symbol?: string | null
+          timestamp: string
+          total: number
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          asset?: string | null
+          created_at?: string
+          hyperliquid_tx_hash?: string | null
+          id?: string
+          price?: number | null
+          status?: string
+          symbol?: string | null
+          timestamp?: string
+          total?: number
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
