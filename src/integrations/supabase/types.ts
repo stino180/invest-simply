@@ -123,6 +123,7 @@ export type Database = {
           email: string | null
           id: string
           low_balance_threshold: number | null
+          network_mode: string
           privy_did: string | null
           updated_at: string
           user_id: string | null
@@ -133,6 +134,7 @@ export type Database = {
           email?: string | null
           id?: string
           low_balance_threshold?: number | null
+          network_mode?: string
           privy_did?: string | null
           updated_at?: string
           user_id?: string | null
@@ -143,6 +145,7 @@ export type Database = {
           email?: string | null
           id?: string
           low_balance_threshold?: number | null
+          network_mode?: string
           privy_did?: string | null
           updated_at?: string
           user_id?: string | null

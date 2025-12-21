@@ -113,6 +113,7 @@ export const useWalletData = () => {
         body: {
           profileId: profile.id,
           walletAddress: walletAddress,
+          networkMode: profile.network_mode || 'mainnet',
         },
       });
 

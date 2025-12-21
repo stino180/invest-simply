@@ -5,7 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info";
+// Network URLs
+const HYPERLIQUID_MAINNET_URL = "https://api.hyperliquid.xyz/info";
+const HYPERLIQUID_TESTNET_URL = "https://api.hyperliquid-testnet.xyz/info";
 
 // Popular spot tokens on Hyperliquid
 const SPOT_TOKENS = [
@@ -50,7 +52,20 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Fetching Hyperliquid market data...');
+    // Parse network mode from request body
+    let networkMode = 'mainnet';
+    try {
+      const body = await req.json();
+      networkMode = body.networkMode || 'mainnet';
+    } catch {
+      // No body or invalid JSON, use default
+    }
+    
+    const HYPERLIQUID_INFO_URL = networkMode === 'testnet' 
+      ? HYPERLIQUID_TESTNET_URL 
+      : HYPERLIQUID_MAINNET_URL;
+    
+    console.log(`Fetching Hyperliquid market data (${networkMode})...`);
 
     // Fetch all mid prices
     const midsResponse = await fetch(HYPERLIQUID_INFO_URL, {
@@ -164,6 +179,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       assets,
+      networkMode,
       fetchedAt: new Date().toISOString()
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

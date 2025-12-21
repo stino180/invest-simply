@@ -6,7 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info";
+// Network URLs
+const HYPERLIQUID_MAINNET_URL = "https://api.hyperliquid.xyz/info";
+const HYPERLIQUID_TESTNET_URL = "https://api.hyperliquid-testnet.xyz/info";
 
 interface SpotBalance {
   coin: string;
@@ -53,7 +55,7 @@ serve(async (req) => {
   }
 
   try {
-    const { profileId, walletAddress } = await req.json();
+    const { profileId, walletAddress, networkMode = 'mainnet' } = await req.json();
 
     if (!profileId || !walletAddress) {
       throw new Error('Missing profileId or walletAddress');
@@ -63,7 +65,11 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log(`Fetching Hyperliquid data for wallet: ${walletAddress}`);
+    const HYPERLIQUID_INFO_URL = networkMode === 'testnet' 
+      ? HYPERLIQUID_TESTNET_URL 
+      : HYPERLIQUID_MAINNET_URL;
+
+    console.log(`Fetching Hyperliquid data for wallet: ${walletAddress} (${networkMode})`);
 
     // Fetch spot clearinghouse state from Hyperliquid
     const spotResponse = await fetch(HYPERLIQUID_INFO_URL, {
