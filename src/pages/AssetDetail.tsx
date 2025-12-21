@@ -1,21 +1,52 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, Plus } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Plus, RefreshCw } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { PriceChart } from '@/components/assets/PriceChart';
 import { PurchaseModal } from '@/components/purchase/PurchaseModal';
-import { getAssetById, formatPrice, formatMarketCap, formatVolume } from '@/data/mockAssets';
+import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 import { mockBalance, mockPortfolio } from '@/data/mockPortfolio';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const formatPrice = (price: number) => {
+  if (price >= 1000) return `$${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  if (price >= 1) return `$${price.toFixed(2)}`;
+  if (price >= 0.01) return `$${price.toFixed(4)}`;
+  return `$${price.toFixed(6)}`;
+};
 
 const AssetDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   
-  const asset = getAssetById(id || '');
+  const { assets, isLoading, refetch } = useCryptoPrices();
+  
+  // Find asset by symbol (case insensitive)
+  const asset = assets.find(a => a.symbol.toLowerCase() === id?.toLowerCase());
   const holding = mockPortfolio.find(h => h.assetId === id);
+
+  if (isLoading) {
+    return (
+      <AppShell hideNav>
+        <div className="p-4 safe-top">
+          <button onClick={() => navigate(-1)} className="p-2 -ml-2">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div className="space-y-4 mt-6">
+            <div className="flex justify-center">
+              <Skeleton className="w-12 h-12 rounded-full" />
+            </div>
+            <Skeleton className="h-10 w-48 mx-auto" />
+            <Skeleton className="h-6 w-24 mx-auto" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   if (!asset) {
     return (
@@ -44,12 +75,31 @@ const AssetDetail = () => {
               <ArrowLeft className="w-6 h-6" />
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-lg">
-                {asset.icon}
-              </div>
+              {asset.image ? (
+                <img 
+                  src={asset.image} 
+                  alt={asset.name} 
+                  className="w-8 h-8 rounded-full"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div 
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                  style={{ backgroundColor: asset.color || 'hsl(var(--primary))' }}
+                >
+                  {asset.symbol.slice(0, 2)}
+                </div>
+              )}
               <span className="font-semibold">{asset.symbol}</span>
             </div>
-            <div className="w-10" /> {/* Spacer */}
+            <button 
+              onClick={() => refetch()}
+              className="p-2 -mr-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Price */}
@@ -75,7 +125,7 @@ const AssetDetail = () => {
 
         {/* Chart */}
         <div className="px-4 mb-6">
-          <PriceChart isPositive={isPositive} />
+          <PriceChart isPositive={isPositive} sparkline={asset.sparkline} />
         </div>
 
         {/* Your Position */}
@@ -116,12 +166,17 @@ const AssetDetail = () => {
           <h3 className="font-semibold mb-3">Market Stats</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-4 rounded-xl bg-card">
-              <div className="text-sm text-muted-foreground mb-1">Market Cap</div>
-              <div className="font-semibold">{formatMarketCap(asset.marketCap)}</div>
+              <div className="text-sm text-muted-foreground mb-1">Current Price</div>
+              <div className="font-semibold">{formatPrice(asset.price)}</div>
             </div>
             <div className="p-4 rounded-xl bg-card">
-              <div className="text-sm text-muted-foreground mb-1">24h Volume</div>
-              <div className="font-semibold">{formatVolume(asset.volume24h)}</div>
+              <div className="text-sm text-muted-foreground mb-1">24h Change</div>
+              <div className={cn(
+                'font-semibold',
+                isPositive ? 'text-success' : 'text-destructive'
+              )}>
+                {isPositive ? '+' : ''}{asset.change24h.toFixed(2)}%
+              </div>
             </div>
           </div>
         </div>
@@ -130,8 +185,8 @@ const AssetDetail = () => {
         <div className="px-4 mb-6">
           <h3 className="font-semibold mb-3">About {asset.name}</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {asset.name} ({asset.symbol}) is one of the leading cryptocurrencies by market capitalization. 
-            It offers unique features and has a strong community of developers and users.
+            {asset.name} ({asset.symbol}) is a cryptocurrency available for trading on Hyperliquid. 
+            Current price: {formatPrice(asset.price)} with a 24h change of {asset.change24h >= 0 ? '+' : ''}{asset.change24h.toFixed(2)}%.
           </p>
         </div>
 
@@ -157,7 +212,18 @@ const AssetDetail = () => {
       </div>
 
       <PurchaseModal
-        asset={asset}
+        asset={{
+          id: asset.id,
+          symbol: asset.symbol,
+          name: asset.name,
+          price: asset.price,
+          change24h: asset.change24h,
+          icon: asset.symbol.slice(0, 2),
+          type: 'crypto' as const,
+          marketCap: 0,
+          volume24h: 0,
+          sparkline: asset.sparkline || [],
+        }}
         isOpen={showPurchaseModal}
         onClose={() => setShowPurchaseModal(false)}
         onConfirm={(amount) => {
