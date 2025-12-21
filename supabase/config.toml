@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.get-wallet-data]
 verify_jwt = false
+
+[functions.agent-wallet]
+verify_jwt = false

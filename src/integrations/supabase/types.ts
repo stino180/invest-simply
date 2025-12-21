@@ -119,6 +119,8 @@ export type Database = {
       }
       profiles: {
         Row: {
+          agent_wallet_address: string | null
+          agent_wallet_authorized_at: string | null
           created_at: string
           email: string | null
           id: string
@@ -128,8 +130,11 @@ export type Database = {
           updated_at: string
           user_id: string | null
           wallet_address: string | null
+          wallet_type: string | null
         }
         Insert: {
+          agent_wallet_address?: string | null
+          agent_wallet_authorized_at?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -139,8 +144,11 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           wallet_address?: string | null
+          wallet_type?: string | null
         }
         Update: {
+          agent_wallet_address?: string | null
+          agent_wallet_authorized_at?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -150,6 +158,7 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           wallet_address?: string | null
+          wallet_type?: string | null
         }
         Relationships: []
       }

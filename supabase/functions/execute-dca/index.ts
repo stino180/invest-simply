@@ -24,6 +24,8 @@ interface Profile {
   privy_did: string;
   wallet_address: string;
   network_mode: 'mainnet' | 'testnet';
+  wallet_type: 'privy' | 'external' | null;
+  agent_wallet_address: string | null;
 }
 
 // Network URLs
@@ -111,6 +113,26 @@ async function signTypedDataWithPrivy(
   return result.data.signature;
 }
 
+// Sign using the agent wallet (for external wallet users)
+async function signTypedDataWithAgent(typedData: unknown): Promise<string> {
+  const { privateKeyToAccount } = await import("https://esm.sh/viem@2.21.0/accounts");
+  const { signTypedData } = await import("https://esm.sh/viem@2.21.0/accounts");
+  
+  const AGENT_PRIVATE_KEY = Deno.env.get("AGENT_WALLET_PRIVATE_KEY");
+  
+  if (!AGENT_PRIVATE_KEY) {
+    throw new Error("Agent wallet not configured");
+  }
+
+  const account = privateKeyToAccount(AGENT_PRIVATE_KEY as `0x${string}`);
+  console.log(`Signing with agent wallet: ${account.address}`);
+
+  // Sign the typed data
+  const signature = await account.signTypedData(typedData as any);
+  console.log("Agent signature obtained successfully");
+  return signature;
+}
+
 // Build EIP-712 typed data for Hyperliquid order
 function buildOrderTypedData(
   action: unknown,
@@ -174,10 +196,14 @@ async function executeHyperliquidOrder(
   amountUsd: number,
   currentPrice: number,
   slippage: number,
-  networkMode: string
+  networkMode: string,
+  useAgentWallet: boolean
 ): Promise<{ orderId: string; amountCrypto: number; executedPrice: number }> {
   const exchangeUrl = networkMode === 'testnet' ? TESTNET_EXCHANGE_URL : MAINNET_EXCHANGE_URL;
   const isMainnet = networkMode === 'mainnet';
+  
+  // Determine which wallet address to use for the order
+  const tradingAddress = useAgentWallet ? profile.agent_wallet_address! : profile.wallet_address;
   
   const assetMeta = ASSET_META[asset];
   if (!assetMeta) {
@@ -213,12 +239,17 @@ async function executeHyperliquidOrder(
   // Build typed data for EIP-712 signing
   const typedData = buildOrderTypedData(action, timestamp, isMainnet);
   
-  // Sign with Privy
-  const signature = await signTypedDataWithPrivy(
-    profile.privy_did,
-    profile.wallet_address,
-    typedData
-  );
+  // Sign with appropriate method
+  let signature: string;
+  if (useAgentWallet) {
+    signature = await signTypedDataWithAgent(typedData);
+  } else {
+    signature = await signTypedDataWithPrivy(
+      profile.privy_did,
+      profile.wallet_address,
+      typedData
+    );
+  }
 
   // Submit to Hyperliquid
   const requestBody = {
@@ -304,7 +335,7 @@ serve(async (req) => {
       .from("dca_plans")
       .select(`
         *,
-        profiles!inner(id, user_id, privy_did, wallet_address, network_mode)
+        profiles!inner(id, user_id, privy_did, wallet_address, network_mode, wallet_type, agent_wallet_address)
       `)
       .eq("is_active", true)
       .lte("next_execution_at", now);
@@ -321,8 +352,14 @@ serve(async (req) => {
     for (const plan of duePlans || []) {
       const profile = plan.profiles as unknown as Profile;
       
-      if (!profile?.wallet_address || !profile?.privy_did) {
-        console.log(`Skipping plan ${plan.id}: missing wallet or privy_did`);
+      // Check wallet requirements based on wallet type
+      const isExternalWallet = profile.wallet_type === 'external';
+      const canExecute = isExternalWallet 
+        ? !!profile.agent_wallet_address  // External wallets need agent authorization
+        : !!profile.wallet_address && !!profile.privy_did;  // Privy wallets need privy_did
+      
+      if (!canExecute) {
+        console.log(`Skipping plan ${plan.id}: wallet not properly configured (type: ${profile.wallet_type})`);
         continue;
       }
 
@@ -341,7 +378,8 @@ serve(async (req) => {
           plan.amount_usd,
           price,
           plan.slippage || 1, // Default 1% slippage
-          networkMode
+          networkMode,
+          isExternalWallet
         );
 
         // Record execution
