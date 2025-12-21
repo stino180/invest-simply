@@ -6,7 +6,7 @@ import { PriceChart } from '@/components/assets/PriceChart';
 import { PurchaseModal } from '@/components/purchase/PurchaseModal';
 import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 import { useWalletData } from '@/hooks/useWalletData';
-import { mockBalance } from '@/data/mockPortfolio';
+
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,7 +24,7 @@ const AssetDetail = () => {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   
   const { assets, isLoading, refetch } = useCryptoPrices();
-  const { holdings } = useWalletData();
+  const { holdings, usdcBalance } = useWalletData();
   
   // Find asset by symbol (case insensitive)
   const asset = assets.find(a => a.symbol.toLowerCase() === id?.toLowerCase());
@@ -221,17 +221,13 @@ const AssetDetail = () => {
           price: asset.price,
           change24h: asset.change24h,
           icon: asset.symbol.slice(0, 2),
-          type: 'crypto' as const,
-          marketCap: 0,
-          volume24h: 0,
-          sparkline: asset.sparkline || [],
         }}
         isOpen={showPurchaseModal}
         onClose={() => setShowPurchaseModal(false)}
-        onConfirm={(amount) => {
-          console.log(`Purchased $${amount} of ${asset.symbol}`);
+        onConfirm={(amount, result) => {
+          console.log(`Purchased ${result?.amountCrypto || amount} of ${asset.symbol}`);
         }}
-        balance={mockBalance.usd}
+        balance={usdcBalance}
       />
     </AppShell>
   );
