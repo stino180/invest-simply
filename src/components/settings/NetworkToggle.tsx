@@ -34,9 +34,7 @@ export const NetworkToggle = () => {
       await refreshProfile();
       
       // Invalidate wallet data queries to force re-sync with new network
-      queryClient.invalidateQueries({ queryKey: ['wallet-holdings'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-data'] });
       
       toast({
         title: `Switched to ${newMode === 'testnet' ? 'Testnet' : 'Mainnet'}`,

@@ -39,68 +39,40 @@ export const useWalletData = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const hasSynced = useRef(false);
 
-  // Fetch cached holdings from database
-  const { data: holdings = [], isLoading: holdingsLoading } = useQuery({
-    queryKey: ['wallet-holdings', profile?.id],
+  // Fetch wallet data from backend function (bypasses RLS)
+  const { data: walletData, isLoading: walletLoading } = useQuery({
+    queryKey: ['wallet-data', profile?.id, profile?.network_mode],
     queryFn: async () => {
-      if (!profile?.id) return [];
-      
-      const { data, error } = await supabase
-        .from('wallet_holdings')
-        .select('*')
-        .order('value_usd', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching holdings:', error);
-        return [];
+      if (!profile?.id) {
+        return { holdings: [], balance: null, transactions: [] };
       }
 
-      return data as WalletHolding[];
+      const { data, error } = await supabase.functions.invoke('get-wallet-data', {
+        body: { profileId: profile.id, limit: 200 },
+      });
+
+      if (error) {
+        console.error('Error fetching wallet data:', error);
+        return { holdings: [], balance: null, transactions: [] };
+      }
+
+      if (!data?.success) {
+        console.error('Wallet data function error:', data?.error);
+        return { holdings: [], balance: null, transactions: [] };
+      }
+
+      return {
+        holdings: (data.holdings || []) as WalletHolding[],
+        balance: (data.balance || null) as WalletBalance | null,
+        transactions: (data.transactions || []) as WalletTransaction[],
+      };
     },
     enabled: isAuthenticated && !!profile?.id,
   });
 
-  // Fetch cached balance from database
-  const { data: balance, isLoading: balanceLoading } = useQuery({
-    queryKey: ['wallet-balance', profile?.id],
-    queryFn: async () => {
-      if (!profile?.id) return null;
-
-      const { data, error } = await supabase
-        .from('wallet_balances')
-        .select('*')
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching balance:', error);
-        return null;
-      }
-
-      return data as WalletBalance | null;
-    },
-    enabled: isAuthenticated && !!profile?.id,
-  });
-
-  // Fetch cached transactions from database
-  const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
-    queryKey: ['wallet-transactions', profile?.id],
-    queryFn: async () => {
-      if (!profile?.id) return [];
-
-      const { data, error } = await supabase
-        .from('wallet_transactions')
-        .select('*')
-        .order('timestamp', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching transactions:', error);
-        return [];
-      }
-
-      return data as WalletTransaction[];
-    },
-    enabled: isAuthenticated && !!profile?.id,
-  });
+  const holdings = walletData?.holdings ?? [];
+  const balance = walletData?.balance ?? null;
+  const transactions = walletData?.transactions ?? [];
 
   // Sync with Hyperliquid
   const syncMutation = useMutation({
@@ -123,9 +95,7 @@ export const useWalletData = () => {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['wallet-holdings'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-data'] });
       toast.success('Wallet synced successfully');
     },
     onError: (error) => {
@@ -162,7 +132,7 @@ export const useWalletData = () => {
     totalValue,
     usdcBalance,
     portfolioChange,
-    isLoading: holdingsLoading || balanceLoading || transactionsLoading,
+    isLoading: walletLoading,
     isSyncing,
     syncWallet,
     lastSynced: balance?.last_synced_at,

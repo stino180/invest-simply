@@ -156,7 +156,7 @@ serve(async (req) => {
 
       const coin = balance.coin;
       
-      if (coin === 'USDC') {
+      if (coin === 'USDC' || coin === 'USDC0') {
         usdcBalance = amount;
         totalValue += amount;
         continue;
