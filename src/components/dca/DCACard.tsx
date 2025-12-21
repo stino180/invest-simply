@@ -1,4 +1,4 @@
-import { Pause, Play, Trash2, Clock, Calendar } from 'lucide-react';
+import { Pause, Play, Trash2, Clock, Pencil } from 'lucide-react';
 import { DCAplan } from '@/data/mockPortfolio';
 import { cn } from '@/lib/utils';
 
@@ -6,6 +6,7 @@ interface DCACardProps {
   plan: DCAplan;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (plan: DCAplan) => void;
 }
 
 const weekDayLabels: Record<string, string> = {
@@ -44,7 +45,7 @@ const formatDate = (date: Date) => {
   }).format(date);
 };
 
-export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
+export const DCACard = ({ plan, onToggle, onDelete, onEdit }: DCACardProps) => {
   return (
     <div className={cn(
       'p-4 rounded-xl bg-card border transition-all',
@@ -63,6 +64,13 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
         
         <div className="flex items-center gap-1">
           <button
+            onClick={() => onEdit(plan)}
+            className="p-2 rounded-lg hover:bg-primary/20 text-primary transition-colors"
+            title="Edit plan"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => onToggle(plan.id)}
             className={cn(
               'p-2 rounded-lg transition-colors',
@@ -70,6 +78,7 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
                 ? 'hover:bg-warning/20 text-warning' 
                 : 'hover:bg-success/20 text-success'
             )}
+            title={plan.isActive ? 'Pause plan' : 'Resume plan'}
           >
             {plan.isActive ? (
               <Pause className="w-4 h-4" />
@@ -80,6 +89,7 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
           <button
             onClick={() => onDelete(plan.id)}
             className="p-2 rounded-lg hover:bg-destructive/20 text-destructive transition-colors"
+            title="Delete plan"
           >
             <Trash2 className="w-4 h-4" />
           </button>

@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { DCACard } from '@/components/dca/DCACard';
-import { CreateDCAModal } from '@/components/dca/CreateDCAModal';
+import { CreateDCAModal, DCAFormData } from '@/components/dca/CreateDCAModal';
 import { mockDCAPlans, DCAplan } from '@/data/mockPortfolio';
 import { Button } from '@/components/ui/button';
 
 const DCAPlans = () => {
   const [plans, setPlans] = useState<DCAplan[]>(mockDCAPlans);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<DCAplan | null>(null);
 
   const activePlans = plans.filter(p => p.isActive);
   const pausedPlans = plans.filter(p => !p.isActive);
@@ -23,38 +24,62 @@ const DCAPlans = () => {
     setPlans(plans.filter(plan => plan.id !== id));
   };
 
-  const handleCreate = (newPlan: { 
-    assetId: string; 
-    amount: number; 
-    frequency: string;
-    customDaysInterval?: number;
-    executionTime: string;
-    timezone: string;
-    specificDays?: string[];
-    slippage: number;
-  }) => {
+  const handleEdit = (plan: DCAplan) => {
+    setEditingPlan(plan);
+    setShowCreateModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false);
+    setEditingPlan(null);
+  };
+
+  const handleConfirm = (newPlan: DCAFormData) => {
     const mockAsset = { btc: { symbol: 'BTC', name: 'Bitcoin', icon: '₿' }, eth: { symbol: 'ETH', name: 'Ethereum', icon: 'Ξ' }, sol: { symbol: 'SOL', name: 'Solana', icon: '◎' } };
     const assetInfo = mockAsset[newPlan.assetId as keyof typeof mockAsset] || { symbol: newPlan.assetId.toUpperCase(), name: newPlan.assetId, icon: '₿' };
     
-    const mockNew: DCAplan = {
-      id: `dca_${Date.now()}`,
-      assetId: newPlan.assetId,
-      symbol: assetInfo.symbol,
-      name: assetInfo.name,
-      icon: assetInfo.icon,
-      amount: newPlan.amount,
-      frequency: newPlan.frequency as DCAplan['frequency'],
-      nextExecution: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
-      totalInvested: 0,
-      isActive: true,
-      createdAt: new Date(),
-      customDaysInterval: newPlan.customDaysInterval,
-      executionTime: newPlan.executionTime,
-      timezone: newPlan.timezone,
-      specificDays: newPlan.specificDays,
-      slippage: newPlan.slippage,
-    };
-    setPlans([...plans, mockNew]);
+    if (editingPlan) {
+      // Update existing plan
+      setPlans(plans.map(plan => 
+        plan.id === editingPlan.id 
+          ? {
+              ...plan,
+              assetId: newPlan.assetId,
+              symbol: assetInfo.symbol,
+              name: assetInfo.name,
+              icon: assetInfo.icon,
+              amount: newPlan.amount,
+              frequency: newPlan.frequency as DCAplan['frequency'],
+              customDaysInterval: newPlan.customDaysInterval,
+              executionTime: newPlan.executionTime,
+              timezone: newPlan.timezone,
+              specificDays: newPlan.specificDays,
+              slippage: newPlan.slippage,
+            }
+          : plan
+      ));
+    } else {
+      // Create new plan
+      const mockNew: DCAplan = {
+        id: `dca_${Date.now()}`,
+        assetId: newPlan.assetId,
+        symbol: assetInfo.symbol,
+        name: assetInfo.name,
+        icon: assetInfo.icon,
+        amount: newPlan.amount,
+        frequency: newPlan.frequency as DCAplan['frequency'],
+        nextExecution: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+        totalInvested: 0,
+        isActive: true,
+        createdAt: new Date(),
+        customDaysInterval: newPlan.customDaysInterval,
+        executionTime: newPlan.executionTime,
+        timezone: newPlan.timezone,
+        specificDays: newPlan.specificDays,
+        slippage: newPlan.slippage,
+      };
+      setPlans([...plans, mockNew]);
+    }
   };
 
   const totalMonthlyInvestment = activePlans.reduce((total, plan) => {
@@ -122,6 +147,7 @@ const DCAPlans = () => {
                   plan={plan}
                   onToggle={handleToggle}
                   onDelete={handleDelete}
+                  onEdit={handleEdit}
                 />
               ))}
             </div>
@@ -141,6 +167,7 @@ const DCAPlans = () => {
                   plan={plan}
                   onToggle={handleToggle}
                   onDelete={handleDelete}
+                  onEdit={handleEdit}
                 />
               ))}
             </div>
@@ -169,8 +196,9 @@ const DCAPlans = () => {
 
       <CreateDCAModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onConfirm={handleCreate}
+        onClose={handleCloseModal}
+        onConfirm={handleConfirm}
+        editingPlan={editingPlan}
       />
     </AppShell>
   );
