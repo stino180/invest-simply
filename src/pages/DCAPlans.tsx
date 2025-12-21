@@ -4,12 +4,14 @@ import { AppShell } from '@/components/layout/AppShell';
 import { DCACard } from '@/components/dca/DCACard';
 import { DCAPortfolioStats } from '@/components/dca/DCAPortfolioStats';
 import { DCAPlanStats } from '@/components/dca/DCAPlanStats';
+import { BalanceWarningCard } from '@/components/dca/BalanceWarningCard';
 import { CreateDCAModal, DCAFormData } from '@/components/dca/CreateDCAModal';
 import { DCAplan } from '@/data/mockPortfolio';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDCAPlans, DBDCAPlan, getAssetInfo } from '@/hooks/useDCAPlans';
 import { useDCAStats } from '@/hooks/useDCAStats';
+import { useBalanceProjection } from '@/hooks/useBalanceProjection';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
 
 // Convert DB plan to display format
@@ -51,6 +53,7 @@ const DCAPlans = () => {
   }, [dbPlans]);
 
   const { portfolioStats, getPlanStats, isLoading: statsLoading } = useDCAStats(planIds, planAssets);
+  const balanceProjection = useBalanceProjection();
 
   // Convert DB plans to display format
   const plans = dbPlans.map(toDisplayPlan);
@@ -164,6 +167,20 @@ const DCAPlans = () => {
 
           {/* Plans Tab */}
           <TabsContent value="plans" className="space-y-6 mt-4">
+            {/* Balance Warning Card */}
+            {activePlans.length > 0 && (
+              <BalanceWarningCard
+                usdcBalance={balanceProjection.usdcBalance}
+                totalMonthlyRequired={balanceProjection.totalMonthlyRequired}
+                nextExecutionTotal={balanceProjection.nextExecutionTotal}
+                executionsCovered={balanceProjection.executionsCovered}
+                weeksCovered={balanceProjection.weeksCovered}
+                hasLowBalance={balanceProjection.hasLowBalance}
+                hasCriticalBalance={balanceProjection.hasCriticalBalance}
+                shortfall={balanceProjection.shortfall}
+              />
+            )}
+
             {/* Summary Card */}
             <DCAPortfolioStats 
               stats={portfolioStats}
