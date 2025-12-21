@@ -300,7 +300,10 @@ serve(async (req) => {
     const timestamp = Date.now();
 
     // Perp order action (meta.universe index)
-    const action = {
+    // IMPORTANT: Hyperliquid signatures are sensitive to msgpack field ordering.
+    // We keep a plain JS object for the HTTP request body, and a Map-based version
+    // (stable insertion order) for msgpack signing.
+    const actionBody = {
       type: "order",
       orders: [
         {
@@ -315,10 +318,33 @@ serve(async (req) => {
       grouping: "na",
     };
 
+    const actionForSigning = new Map<string, unknown>([
+      ["type", "order"],
+      [
+        "orders",
+        [
+          new Map<string, unknown>([
+            ["a", perpAssetId],
+            ["b", true],
+            ["p", formattedPrice],
+            ["s", formattedSize],
+            ["r", false],
+            [
+              "t",
+              new Map<string, unknown>([
+                ["limit", new Map<string, unknown>([["tif", "Ioc"]])],
+              ]),
+            ],
+          ]),
+        ],
+      ],
+      ["grouping", "na"],
+    ]);
+
     // Sign & submit as a Hyperliquid L1 action (SDK-style signing)
     const sig = await signL1ActionWithAgentWallet({
       privateKey: agentWallet.privateKey,
-      action,
+      action: actionForSigning,
       nonce: timestamp,
       isMainnet,
       vaultAddress: null,
@@ -329,7 +355,7 @@ serve(async (req) => {
     // Submit to Hyperliquid
     // NOTE: vaultAddress is only for subaccounts/vaults. For normal user trading via agent wallets, keep this null.
     const requestBody = {
-      action,
+      action: actionBody,
       nonce: timestamp,
       signature: sig,
       vaultAddress: null,
