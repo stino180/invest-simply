@@ -6,33 +6,11 @@ export interface CryptoAsset {
   symbol: string;
   name: string;
   image: string;
+  color: string;
   price: number;
   change24h: number;
-  marketCap: number;
-  volume24h: number;
   sparkline: number[];
 }
-
-// Brand colors for popular cryptos
-export const cryptoColors: Record<string, string> = {
-  BTC: '#F7931A',
-  ETH: '#627EEA',
-  SOL: '#00FFA3',
-  AVAX: '#E84142',
-  LINK: '#2A5ADA',
-  ARB: '#28A0F0',
-  OP: '#FF0420',
-  MATIC: '#8247E5',
-  POL: '#8247E5',
-  DOGE: '#C2A633',
-  ADA: '#0033AD',
-  DOT: '#E6007A',
-  UNI: '#FF007A',
-  AAVE: '#B6509E',
-  MKR: '#1AAB9B',
-  COMP: '#00D395',
-  HYPE: '#22D3EE',
-};
 
 export const useCryptoPrices = () => {
   const [assets, setAssets] = useState<CryptoAsset[]>([]);
@@ -66,8 +44,8 @@ export const useCryptoPrices = () => {
   useEffect(() => {
     fetchPrices();
     
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchPrices, 60000);
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchPrices, 30000);
     return () => clearInterval(interval);
   }, []);
 

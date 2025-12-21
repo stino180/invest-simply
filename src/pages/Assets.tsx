@@ -37,7 +37,8 @@ const Assets = () => {
       return [...filteredAssets].sort((a, b) => a.change24h - b.change24h);
     }
     if (activeFilter === 'Trending') {
-      return [...filteredAssets].sort((a, b) => b.volume24h - a.volume24h);
+      // Sort by price as proxy for popularity since we don't have volume
+      return [...filteredAssets].sort((a, b) => b.price - a.price);
     }
     return filteredAssets;
   })();
