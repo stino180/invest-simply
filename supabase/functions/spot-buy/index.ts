@@ -160,8 +160,12 @@ function hexToRsv(signatureHex: string): { r: string; s: string; v: number } {
   const sig = signatureHex.startsWith("0x") ? signatureHex.slice(2) : signatureHex;
   const r = `0x${sig.slice(0, 64)}`;
   const s = `0x${sig.slice(64, 128)}`;
-  // viem returns yParity (0/1) as the final byte; Hyperliquid expects 27/28
-  const v = parseInt(sig.slice(128, 130), 16) + 27;
+  // viem signTypedData returns v as 27 or 28 already (not 0/1)
+  let v = parseInt(sig.slice(128, 130), 16);
+  // If it's 0 or 1 (raw yParity), convert to 27/28
+  if (v < 27) {
+    v += 27;
+  }
   return { r, s, v };
 }
 
