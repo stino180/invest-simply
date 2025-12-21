@@ -20,12 +20,16 @@ export const NetworkToggle = () => {
     const newMode = isTestnet ? 'mainnet' : 'testnet';
     
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ network_mode: newMode })
-        .eq('id', profile.id);
+      // Use edge function to bypass RLS (Privy auth doesn't use Supabase auth)
+      const { data, error } = await supabase.functions.invoke('update-profile', {
+        body: {
+          profileId: profile.id,
+          updates: { network_mode: newMode }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Update failed');
       
       await refreshProfile();
       
