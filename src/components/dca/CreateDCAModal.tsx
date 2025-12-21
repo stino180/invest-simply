@@ -6,20 +6,24 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { DCAplan } from '@/data/mockPortfolio';
+
+export interface DCAFormData {
+  assetId: string; 
+  amount: number; 
+  frequency: string;
+  customDaysInterval?: number;
+  executionTime: string;
+  timezone: string;
+  specificDays?: string[];
+  slippage: number;
+}
 
 interface CreateDCAModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (plan: { 
-    assetId: string; 
-    amount: number; 
-    frequency: string;
-    customDaysInterval?: number;
-    executionTime: string;
-    timezone: string;
-    specificDays?: string[];
-    slippage: number;
-  }) => void;
+  onConfirm: (plan: DCAFormData) => void;
+  editingPlan?: DCAplan | null;
 }
 
 const slippagePresets = [0.1, 0.5, 1.0, 2.0];
@@ -51,7 +55,7 @@ const getUserTimezone = (): string => {
   }
 };
 
-export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalProps) => {
+export const CreateDCAModal = ({ isOpen, onClose, onConfirm, editingPlan }: CreateDCAModalProps) => {
   const [selectedAsset, setSelectedAsset] = useState<Asset>(mockAssets[0]);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [amount, setAmount] = useState('50');
@@ -74,11 +78,44 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
   const numAmount = parseFloat(amount) || 0;
   const numCustomDays = parseInt(customDays) || 1;
   const numSlippage = parseFloat(slippage) || 0.5;
+  
+  const isEditing = !!editingPlan;
 
-  // Auto-detect timezone on mount
+  // Populate form when editing
   useEffect(() => {
-    setTimezone(getUserTimezone());
-  }, []);
+    if (editingPlan) {
+      const asset = mockAssets.find(a => a.id === editingPlan.assetId) || mockAssets[0];
+      setSelectedAsset(asset);
+      setAmount(editingPlan.amount.toString());
+      
+      if (editingPlan.frequency === 'custom') {
+        setScheduleType('custom');
+        setCustomDays(editingPlan.customDaysInterval?.toString() || '3');
+      } else if (editingPlan.frequency === 'calendar') {
+        setScheduleType('calendar');
+        setSelectedDays(editingPlan.specificDays || ['monday']);
+      } else {
+        setScheduleType('preset');
+        setFrequency(editingPlan.frequency);
+      }
+      
+      setExecutionTime(editingPlan.executionTime || '09:00');
+      setTimezone(editingPlan.timezone || getUserTimezone());
+      setSlippage(editingPlan.slippage?.toString() || '0.5');
+      
+      // Show advanced if custom settings exist
+      if (editingPlan.executionTime || (editingPlan.slippage && editingPlan.slippage !== 0.5)) {
+        setShowAdvanced(true);
+      }
+    }
+  }, [editingPlan]);
+
+  // Auto-detect timezone on mount (only if not editing)
+  useEffect(() => {
+    if (!editingPlan) {
+      setTimezone(getUserTimezone());
+    }
+  }, [editingPlan]);
 
   const toggleDay = (day: string) => {
     setSelectedDays(prev => 
@@ -161,14 +198,18 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
             <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center mx-auto mb-4 animate-scale-in">
               <Check className="w-8 h-8 text-success" />
             </div>
-            <h3 className="text-xl font-bold mb-2 text-foreground">DCA Plan Created!</h3>
+            <h3 className="text-xl font-bold mb-2 text-foreground">
+              {isEditing ? 'DCA Plan Updated!' : 'DCA Plan Created!'}
+            </h3>
             <p className="text-muted-foreground">
               Auto-buying ${numAmount} of {selectedAsset.symbol} {getScheduleSummary()}
             </p>
           </div>
         ) : (
           <>
-            <h3 className="text-xl font-bold mb-6 text-foreground">Create DCA Plan</h3>
+            <h3 className="text-xl font-bold mb-6 text-foreground">
+              {isEditing ? 'Edit DCA Plan' : 'Create DCA Plan'}
+            </h3>
 
             {/* Asset Selector */}
             <div className="mb-4">
@@ -496,6 +537,8 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
             >
               {isProcessing ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
+              ) : isEditing ? (
+                'Update DCA Plan'
               ) : (
                 'Create DCA Plan'
               )}
