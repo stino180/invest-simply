@@ -49,8 +49,8 @@ const Assets = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold font-display">Assets</h1>
-            <p className="text-sm text-muted-foreground">Live prices from CoinGecko</p>
+            <h1 className="text-2xl font-bold font-display text-foreground">Assets</h1>
+            <p className="text-sm text-muted-foreground">Live prices from Hyperliquid</p>
           </div>
           <Button
             variant="ghost"
@@ -70,7 +70,7 @@ const Assets = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search assets..."
-            className="w-full h-12 pl-12 pr-4 bg-secondary rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors"
+            className="w-full h-12 pl-12 pr-4 bg-secondary text-foreground rounded-xl border-2 border-transparent focus:border-primary focus:outline-none transition-colors placeholder:text-muted-foreground"
           />
         </div>
 

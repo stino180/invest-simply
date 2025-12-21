@@ -58,7 +58,7 @@ const DCAPlans = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold font-display">DCA Plans</h1>
+            <h1 className="text-2xl font-bold font-display text-foreground">DCA Plans</h1>
             <p className="text-sm text-muted-foreground">Automate your investments</p>
           </div>
           <Button 
@@ -75,7 +75,7 @@ const DCAPlans = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Monthly investment</p>
-              <p className="text-2xl font-bold font-display">
+              <p className="text-2xl font-bold font-display text-foreground">
                 ${totalMonthlyInvestment.toLocaleString()}
               </p>
             </div>
@@ -130,7 +130,7 @@ const DCAPlans = () => {
             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4">
               <Plus className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="font-semibold mb-2">No DCA plans yet</h3>
+            <h3 className="font-semibold mb-2 text-foreground">No DCA plans yet</h3>
             <p className="text-sm text-muted-foreground mb-6">
               Create your first automated investment plan
             </p>

@@ -71,7 +71,7 @@ export const PurchaseModal = ({
             <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center mx-auto mb-4 animate-scale-in">
               <Check className="w-8 h-8 text-success" />
             </div>
-            <h3 className="text-xl font-bold mb-2">Purchase Confirmed!</h3>
+            <h3 className="text-xl font-bold mb-2 text-foreground">Purchase Confirmed!</h3>
             <p className="text-muted-foreground">
               You bought {estimatedQty.toFixed(6)} {asset.symbol}
             </p>

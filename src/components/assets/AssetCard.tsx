@@ -67,7 +67,7 @@ export const AssetCard = ({ asset }: AssetCardProps) => {
           )}
         </div>
         <div>
-          <div className="font-semibold flex items-center gap-2">
+          <div className="font-semibold text-foreground flex items-center gap-2">
             {asset.symbol}
             <span 
               className="w-2 h-2 rounded-full"
@@ -84,7 +84,7 @@ export const AssetCard = ({ asset }: AssetCardProps) => {
         </div>
         
         <div className="text-right min-w-[100px]">
-          <div className="font-semibold">{formatPrice(asset.price)}</div>
+          <div className="font-semibold text-foreground">{formatPrice(asset.price)}</div>
           <div className={cn(
             'text-sm font-medium',
             isPositive ? 'text-success' : 'text-destructive'

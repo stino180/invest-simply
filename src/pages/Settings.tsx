@@ -50,7 +50,7 @@ const SettingItem = ({
         <Icon className={cn('w-5 h-5', danger && 'text-destructive')} />
       </div>
       <div className="text-left">
-        <div className={cn('font-medium', danger && 'text-destructive')}>{label}</div>
+        <div className={cn('font-medium text-foreground', danger && 'text-destructive')}>{label}</div>
         {description && (
           <div className="text-sm text-muted-foreground">{description}</div>
         )}
@@ -92,7 +92,7 @@ const Settings = () => {
       <div className="p-4 safe-top space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold font-display">Settings</h1>
+          <h1 className="text-2xl font-bold font-display text-foreground">Settings</h1>
           <p className="text-sm text-muted-foreground">Manage your account</p>
         </div>
 
@@ -102,7 +102,7 @@ const Settings = () => {
             {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1">
-            <div className="font-semibold">{displayName}</div>
+            <div className="font-semibold text-foreground">{displayName}</div>
             <div className="text-sm text-muted-foreground">{profile?.email || 'Wallet connected'}</div>
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground" />
