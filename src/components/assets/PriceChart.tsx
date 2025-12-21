@@ -3,28 +3,16 @@ import { cn } from '@/lib/utils';
 
 interface PriceChartProps {
   isPositive: boolean;
+  sparkline?: number[];
 }
 
 const timeframes = ['1H', '1D', '1W', '1M', '1Y', 'ALL'];
 
-// Generate mock chart data
-const generateChartData = (points: number, trend: 'up' | 'down' | 'volatile') => {
-  const data: number[] = [];
-  let value = 100;
-  
-  for (let i = 0; i < points; i++) {
-    const change = (Math.random() - 0.5) * 4;
-    const trendBias = trend === 'up' ? 0.3 : trend === 'down' ? -0.3 : 0;
-    value = value + change + trendBias;
-    data.push(value);
-  }
-  
-  return data;
-};
-
-export const PriceChart = ({ isPositive }: PriceChartProps) => {
+export const PriceChart = ({ isPositive, sparkline }: PriceChartProps) => {
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
-  const data = generateChartData(48, isPositive ? 'up' : 'down');
+  
+  // Use sparkline data if provided, otherwise generate placeholder
+  const data = sparkline && sparkline.length > 0 ? sparkline : Array(24).fill(100);
   
   const min = Math.min(...data);
   const max = Math.max(...data);
