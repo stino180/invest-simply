@@ -17,6 +17,7 @@ interface Profile {
   wallet_type: 'privy' | 'external' | null;
   agent_wallet_address: string | null;
   agent_wallet_private_key_encrypted: string | null;
+  agent_wallet_authorized_at?: string | null;
 }
 
 // Network URLs
@@ -83,7 +84,6 @@ async function ensureAgentWallet(
     .update({
       agent_wallet_address: account.address as string,
       agent_wallet_private_key_encrypted: encryptedKey,
-      agent_wallet_authorized_at: new Date().toISOString()
     })
     .eq("id", profile.id);
 
@@ -290,6 +290,17 @@ serve(async (req) => {
 
     // Ensure user has an agent wallet (create one if needed)
     const agentWallet = await ensureAgentWallet(supabase, typedProfile);
+
+    // IMPORTANT: agent wallets must be approved on Hyperliquid by the user's main wallet
+    if (!typedProfile.agent_wallet_authorized_at) {
+      throw new Error(
+        "Agent wallet not authorized yet. Open Wallet → Authorize Agent Wallet, then try again."
+      );
+    }
+
+    console.log(
+      `Trading setup: user=${typedProfile.wallet_address} agent=${agentWallet.address} net=${networkMode}`
+    );
 
     // Get current price
     const currentPrice = await getSpotPrice(asset, networkMode);
