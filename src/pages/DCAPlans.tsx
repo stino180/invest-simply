@@ -23,32 +23,53 @@ const DCAPlans = () => {
     setPlans(plans.filter(plan => plan.id !== id));
   };
 
-  const handleCreate = (newPlan: { assetId: string; amount: number; frequency: string }) => {
-    const asset = plans.find(p => p.assetId === newPlan.assetId);
-    // In real app, fetch asset details
+  const handleCreate = (newPlan: { 
+    assetId: string; 
+    amount: number; 
+    frequency: string;
+    customDaysInterval?: number;
+    executionTime: string;
+    timezone: string;
+    specificDays?: string[];
+  }) => {
+    const mockAsset = { btc: { symbol: 'BTC', name: 'Bitcoin', icon: '₿' }, eth: { symbol: 'ETH', name: 'Ethereum', icon: 'Ξ' }, sol: { symbol: 'SOL', name: 'Solana', icon: '◎' } };
+    const assetInfo = mockAsset[newPlan.assetId as keyof typeof mockAsset] || { symbol: newPlan.assetId.toUpperCase(), name: newPlan.assetId, icon: '₿' };
+    
     const mockNew: DCAplan = {
       id: `dca_${Date.now()}`,
       assetId: newPlan.assetId,
-      symbol: newPlan.assetId.toUpperCase(),
-      name: newPlan.assetId,
-      icon: '₿',
+      symbol: assetInfo.symbol,
+      name: assetInfo.name,
+      icon: assetInfo.icon,
       amount: newPlan.amount,
       frequency: newPlan.frequency as DCAplan['frequency'],
       nextExecution: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
       totalInvested: 0,
       isActive: true,
       createdAt: new Date(),
+      customDaysInterval: newPlan.customDaysInterval,
+      executionTime: newPlan.executionTime,
+      timezone: newPlan.timezone,
+      specificDays: newPlan.specificDays,
     };
     setPlans([...plans, mockNew]);
   };
 
   const totalMonthlyInvestment = activePlans.reduce((total, plan) => {
-    const multiplier = {
-      daily: 30,
-      weekly: 4,
-      biweekly: 2,
-      monthly: 1,
-    }[plan.frequency];
+    let multiplier = 1;
+    if (plan.frequency === 'daily') {
+      multiplier = 30;
+    } else if (plan.frequency === 'weekly') {
+      multiplier = 4;
+    } else if (plan.frequency === 'biweekly') {
+      multiplier = 2;
+    } else if (plan.frequency === 'monthly') {
+      multiplier = 1;
+    } else if (plan.frequency === 'custom' && plan.customDaysInterval) {
+      multiplier = 30 / plan.customDaysInterval;
+    } else if (plan.frequency === 'calendar' && plan.specificDays) {
+      multiplier = plan.specificDays.length * 4; // ~4 weeks per month
+    }
     return total + (plan.amount * multiplier);
   }, 0);
 

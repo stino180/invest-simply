@@ -63,10 +63,14 @@ export type Database = {
           amount_usd: number
           asset: string
           created_at: string
+          custom_days_interval: number | null
+          execution_time: string | null
           frequency: string
           id: string
           is_active: boolean
           next_execution_at: string | null
+          specific_days: string[] | null
+          timezone: string | null
           updated_at: string
           user_id: string
         }
@@ -74,10 +78,14 @@ export type Database = {
           amount_usd: number
           asset: string
           created_at?: string
+          custom_days_interval?: number | null
+          execution_time?: string | null
           frequency: string
           id?: string
           is_active?: boolean
           next_execution_at?: string | null
+          specific_days?: string[] | null
+          timezone?: string | null
           updated_at?: string
           user_id: string
         }
@@ -85,10 +93,14 @@ export type Database = {
           amount_usd?: number
           asset?: string
           created_at?: string
+          custom_days_interval?: number | null
+          execution_time?: string | null
           frequency?: string
           id?: string
           is_active?: boolean
           next_execution_at?: string | null
+          specific_days?: string[] | null
+          timezone?: string | null
           updated_at?: string
           user_id?: string
         }

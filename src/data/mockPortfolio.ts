@@ -27,11 +27,16 @@ export interface DCAplan {
   name: string;
   icon: string;
   amount: number;
-  frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+  frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom' | 'calendar';
   nextExecution: Date;
   totalInvested: number;
   isActive: boolean;
   createdAt: Date;
+  // Flexible scheduling options
+  customDaysInterval?: number;
+  executionTime?: string;
+  timezone?: string;
+  specificDays?: string[];
 }
 
 export const mockPortfolio: PortfolioHolding[] = [
