@@ -1,4 +1,4 @@
-import { Pause, Play, Trash2 } from 'lucide-react';
+import { Pause, Play, Trash2, Clock, Calendar } from 'lucide-react';
 import { DCAplan } from '@/data/mockPortfolio';
 import { cn } from '@/lib/utils';
 
@@ -8,14 +8,31 @@ interface DCACardProps {
   onDelete: (id: string) => void;
 }
 
-const formatFrequency = (freq: string) => {
+const weekDayLabels: Record<string, string> = {
+  monday: 'Mon',
+  tuesday: 'Tue',
+  wednesday: 'Wed',
+  thursday: 'Thu',
+  friday: 'Fri',
+  saturday: 'Sat',
+  sunday: 'Sun',
+};
+
+const formatFrequency = (plan: DCAplan): string => {
+  if (plan.frequency === 'custom' && plan.customDaysInterval) {
+    return `Every ${plan.customDaysInterval} day${plan.customDaysInterval > 1 ? 's' : ''}`;
+  }
+  if (plan.frequency === 'calendar' && plan.specificDays?.length) {
+    const days = plan.specificDays.map(d => weekDayLabels[d] || d).join(', ');
+    return days;
+  }
   const labels: Record<string, string> = {
     daily: 'Daily',
     weekly: 'Weekly',
     biweekly: 'Every 2 weeks',
     monthly: 'Monthly',
   };
-  return labels[freq] || freq;
+  return labels[plan.frequency] || plan.frequency;
 };
 
 const formatDate = (date: Date) => {
@@ -76,7 +93,7 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
         </div>
         <div>
           <span className="text-muted-foreground">Frequency</span>
-          <div className="font-semibold text-foreground">{formatFrequency(plan.frequency)}</div>
+          <div className="font-semibold text-foreground">{formatFrequency(plan)}</div>
         </div>
         <div>
           <span className="text-muted-foreground">Next buy</span>
@@ -89,6 +106,17 @@ export const DCACard = ({ plan, onToggle, onDelete }: DCACardProps) => {
           <div className="font-semibold text-foreground">${plan.totalInvested.toLocaleString()}</div>
         </div>
       </div>
+
+      {/* Execution time display */}
+      {plan.executionTime && (
+        <div className="mt-3 pt-3 border-t border-border flex items-center gap-2 text-xs text-muted-foreground">
+          <Clock className="w-3.5 h-3.5" />
+          <span>Executes at {plan.executionTime}</span>
+          {plan.timezone && (
+            <span className="text-muted-foreground/60">({plan.timezone})</span>
+          )}
+        </div>
+      )}
     </div>
   );
 };

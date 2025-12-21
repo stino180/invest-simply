@@ -1,36 +1,109 @@
-import { useState } from 'react';
-import { X, ChevronDown, Check, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, ChevronDown, Check, Loader2, Clock, Calendar } from 'lucide-react';
 import { mockAssets, Asset, formatPrice } from '@/data/mockAssets';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+
+interface ScheduleConfig {
+  type: 'preset' | 'custom' | 'calendar';
+  frequency: string;
+  customDays?: number;
+  executionTime: string;
+  timezone: string;
+  specificDays: string[];
+}
 
 interface CreateDCAModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (plan: { assetId: string; amount: number; frequency: string }) => void;
+  onConfirm: (plan: { 
+    assetId: string; 
+    amount: number; 
+    frequency: string;
+    customDaysInterval?: number;
+    executionTime: string;
+    timezone: string;
+    specificDays?: string[];
+  }) => void;
 }
 
-const frequencies = [
+const presetFrequencies = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
-  { value: 'biweekly', label: 'Every 2 weeks' },
+  { value: 'biweekly', label: 'Bi-weekly' },
   { value: 'monthly', label: 'Monthly' },
 ];
 
+const weekDays = [
+  { value: 'monday', label: 'Mon' },
+  { value: 'tuesday', label: 'Tue' },
+  { value: 'wednesday', label: 'Wed' },
+  { value: 'thursday', label: 'Thu' },
+  { value: 'friday', label: 'Fri' },
+  { value: 'saturday', label: 'Sat' },
+  { value: 'sunday', label: 'Sun' },
+];
+
 const presetAmounts = [25, 50, 100, 250];
+
+const getUserTimezone = (): string => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return 'UTC';
+  }
+};
 
 export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalProps) => {
   const [selectedAsset, setSelectedAsset] = useState<Asset>(mockAssets[0]);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [amount, setAmount] = useState('50');
-  const [frequency, setFrequency] = useState('weekly');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  
+  // Schedule state
+  const [scheduleType, setScheduleType] = useState<'preset' | 'custom' | 'calendar'>('preset');
+  const [frequency, setFrequency] = useState('weekly');
+  const [customDays, setCustomDays] = useState('3');
+  const [executionTime, setExecutionTime] = useState('09:00');
+  const [timezone, setTimezone] = useState(getUserTimezone());
+  const [selectedDays, setSelectedDays] = useState<string[]>(['monday']);
 
   const numAmount = parseFloat(amount) || 0;
+  const numCustomDays = parseInt(customDays) || 1;
+
+  // Auto-detect timezone on mount
+  useEffect(() => {
+    setTimezone(getUserTimezone());
+  }, []);
+
+  const toggleDay = (day: string) => {
+    setSelectedDays(prev => 
+      prev.includes(day) 
+        ? prev.filter(d => d !== day)
+        : [...prev, day]
+    );
+  };
+
+  const getScheduleSummary = (): string => {
+    let frequencyText = '';
+    
+    if (scheduleType === 'preset') {
+      frequencyText = presetFrequencies.find(f => f.value === frequency)?.label.toLowerCase() || frequency;
+    } else if (scheduleType === 'custom') {
+      frequencyText = `every ${numCustomDays} day${numCustomDays > 1 ? 's' : ''}`;
+    } else {
+      const days = selectedDays.map(d => weekDays.find(wd => wd.value === d)?.label).join(', ');
+      frequencyText = `on ${days || 'selected days'}`;
+    }
+
+    return `${frequencyText} at ${executionTime}`;
+  };
 
   const handleConfirm = async () => {
     if (numAmount <= 0) return;
+    if (scheduleType === 'calendar' && selectedDays.length === 0) return;
     
     setIsProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -38,10 +111,25 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
     setIsSuccess(true);
     
     setTimeout(() => {
-      onConfirm({ assetId: selectedAsset.id, amount: numAmount, frequency });
+      const finalFrequency = scheduleType === 'custom' ? 'custom' : 
+                             scheduleType === 'calendar' ? 'calendar' : 
+                             frequency;
+      
+      onConfirm({ 
+        assetId: selectedAsset.id, 
+        amount: numAmount, 
+        frequency: finalFrequency,
+        customDaysInterval: scheduleType === 'custom' ? numCustomDays : undefined,
+        executionTime,
+        timezone,
+        specificDays: scheduleType === 'calendar' ? selectedDays : undefined,
+      });
       setIsSuccess(false);
       setAmount('50');
       setFrequency('weekly');
+      setScheduleType('preset');
+      setCustomDays('3');
+      setSelectedDays(['monday']);
       onClose();
     }, 1500);
   };
@@ -70,7 +158,7 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
             </div>
             <h3 className="text-xl font-bold mb-2 text-foreground">DCA Plan Created!</h3>
             <p className="text-muted-foreground">
-              Auto-buying ${numAmount} of {selectedAsset.symbol} {frequency}
+              Auto-buying ${numAmount} of {selectedAsset.symbol} {getScheduleSummary()}
             </p>
           </div>
         ) : (
@@ -165,27 +253,147 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
               </div>
             </div>
 
-            {/* Frequency Selector */}
-            <div className="mb-6">
+            {/* Schedule Type Tabs */}
+            <div className="mb-4">
               <label className="text-sm text-muted-foreground mb-2 block">
-                Frequency
+                Schedule Type
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                {frequencies.map((freq) => (
-                  <button
-                    key={freq.value}
-                    onClick={() => setFrequency(freq.value)}
-                    className={cn(
-                      'py-3 rounded-xl text-sm font-medium transition-all',
-                      frequency === freq.value
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary text-foreground hover:bg-secondary/80'
-                    )}
-                  >
-                    {freq.label}
-                  </button>
-                ))}
+              <div className="flex bg-secondary rounded-xl p-1 gap-1">
+                <button
+                  onClick={() => setScheduleType('preset')}
+                  className={cn(
+                    'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1.5',
+                    scheduleType === 'preset'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-card'
+                  )}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Standard
+                </button>
+                <button
+                  onClick={() => setScheduleType('custom')}
+                  className={cn(
+                    'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all',
+                    scheduleType === 'custom'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-card'
+                  )}
+                >
+                  Every X Days
+                </button>
+                <button
+                  onClick={() => setScheduleType('calendar')}
+                  className={cn(
+                    'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1.5',
+                    scheduleType === 'calendar'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-card'
+                  )}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Days
+                </button>
               </div>
+            </div>
+
+            {/* Preset Frequency Selector */}
+            {scheduleType === 'preset' && (
+              <div className="mb-4">
+                <label className="text-sm text-muted-foreground mb-2 block">
+                  Frequency
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {presetFrequencies.map((freq) => (
+                    <button
+                      key={freq.value}
+                      onClick={() => setFrequency(freq.value)}
+                      className={cn(
+                        'py-3 rounded-xl text-sm font-medium transition-all',
+                        frequency === freq.value
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary text-foreground hover:bg-secondary/80'
+                      )}
+                    >
+                      {freq.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Custom Days Input */}
+            {scheduleType === 'custom' && (
+              <div className="mb-4">
+                <label className="text-sm text-muted-foreground mb-2 block">
+                  Every how many days?
+                </label>
+                <div className="flex items-center gap-3">
+                  <span className="text-foreground">Every</span>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    className="w-20 text-center text-foreground bg-secondary border-transparent focus:border-primary"
+                  />
+                  <span className="text-foreground">day{numCustomDays > 1 ? 's' : ''}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Calendar Day Selector */}
+            {scheduleType === 'calendar' && (
+              <div className="mb-4">
+                <label className="text-sm text-muted-foreground mb-2 block">
+                  Select days of the week
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {weekDays.map((day) => (
+                    <button
+                      key={day.value}
+                      onClick={() => toggleDay(day.value)}
+                      className={cn(
+                        'px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                        selectedDays.includes(day.value)
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary text-foreground hover:bg-secondary/80'
+                      )}
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+                {selectedDays.length === 0 && (
+                  <p className="text-xs text-destructive mt-2">Please select at least one day</p>
+                )}
+              </div>
+            )}
+
+            {/* Execution Time */}
+            <div className="mb-4">
+              <label className="text-sm text-muted-foreground mb-2 block">
+                Execution Time
+              </label>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <Input
+                    type="time"
+                    value={executionTime}
+                    onChange={(e) => setExecutionTime(e.target.value)}
+                    className="text-foreground bg-secondary border-transparent focus:border-primary"
+                  />
+                </div>
+                <div className="flex-1">
+                  <div className="h-10 px-3 flex items-center bg-secondary rounded-md text-sm text-muted-foreground truncate">
+                    {timezone}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Timezone auto-detected from your browser
+              </p>
             </div>
 
             {/* Summary */}
@@ -193,13 +401,13 @@ export const CreateDCAModal = ({ isOpen, onClose, onConfirm }: CreateDCAModalPro
               <p className="text-sm text-center text-muted-foreground">
                 You'll automatically invest <span className="font-semibold text-foreground">${numAmount}</span> into{' '}
                 <span className="font-semibold text-foreground">{selectedAsset.symbol}</span>{' '}
-                {frequencies.find(f => f.value === frequency)?.label.toLowerCase()}
+                {getScheduleSummary()}
               </p>
             </div>
 
             <Button
               onClick={handleConfirm}
-              disabled={numAmount <= 0 || isProcessing}
+              disabled={numAmount <= 0 || isProcessing || (scheduleType === 'calendar' && selectedDays.length === 0)}
               className="w-full h-14 text-lg font-semibold rounded-xl gradient-primary hover:opacity-90 transition-opacity"
             >
               {isProcessing ? (
