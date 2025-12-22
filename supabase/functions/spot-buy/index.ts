@@ -21,6 +21,14 @@ interface Profile {
   agent_wallet_authorized_at?: string | null;
 }
 
+class HttpError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 // Network URLs
 const MAINNET_INFO_URL = "https://api.hyperliquid.xyz/info";
 const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
@@ -416,7 +424,24 @@ serve(async (req) => {
     }
     
     if (result.status === "err") {
-      throw new Error(`Hyperliquid error: ${result.response}`);
+      const hlMsg = String(result.response ?? "");
+
+      // Hyperliquid returns this when the currently-signing agent wallet isn't registered/approved.
+      // Our UI marks authorization optimistically, so if HL rejects we clear authorization and
+      // force the user to re-authorize the CURRENT agent address.
+      if (hlMsg.toLowerCase().includes("does not exist")) {
+        await supabase
+          .from("profiles")
+          .update({ agent_wallet_authorized_at: null })
+          .eq("id", profileId);
+
+        throw new HttpError(
+          `Agent wallet not recognized by Hyperliquid yet. Open Wallet → Authorize Agent Wallet for ${agentWallet.address}, then try again.`,
+          409
+        );
+      }
+
+      throw new HttpError(`Hyperliquid error: ${hlMsg}`, 502);
     }
 
     const orderId = result.response?.data?.statuses?.[0]?.resting?.oid || 
@@ -461,12 +486,16 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Spot buy error:", error);
+
+    const status = error instanceof HttpError ? error.status : 500;
+    const message = error instanceof Error ? error.message : "Unknown error";
+
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: message,
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
