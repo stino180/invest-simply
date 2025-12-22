@@ -22,6 +22,16 @@ const APPROVE_AGENT_TYPES = {
   ],
 };
 
+const hexToRsv = (signature: string) => {
+  const sig = signature.startsWith('0x') ? signature.slice(2) : signature;
+  if (sig.length !== 130) throw new Error('Invalid signature length');
+  const r = `0x${sig.slice(0, 64)}`;
+  const s = `0x${sig.slice(64, 128)}`;
+  let v = parseInt(sig.slice(128, 130), 16);
+  if (v < 27) v += 27;
+  return { r, s, v };
+};
+
 export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps) => {
   const { profile } = usePrivyAuth();
   const { wallets } = useWallets();
@@ -36,7 +46,9 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
   const hyperliquidApiUrl = isTestnet 
     ? 'https://api.hyperliquid-testnet.xyz/exchange'
     : 'https://api.hyperliquid.xyz/exchange';
-  const signatureChainId = isTestnet ? 0x66eee : 0xa4b1; // Arbitrum Sepolia for testnet, Arbitrum One for mainnet
+
+  // Hyperliquid user-signed typed data uses this chainId (per their signing spec)
+  const signatureChainId = 0x66eee;
 
   useEffect(() => {
     fetchAgentStatus();
@@ -113,16 +125,17 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       };
 
       // Sign with the wallet
-      const signature = await provider.request({
+      const signatureHex = await provider.request({
         method: 'eth_signTypedData_v4',
         params: [walletAddress, JSON.stringify(typedData)],
       });
+
+      const signature = hexToRsv(signatureHex);
 
       // Submit to Hyperliquid
       const action = {
         type: "approveAgent",
         hyperliquidChain,
-        signatureChainId: `0x${signatureChainId.toString(16)}`,
         agentAddress,
         agentName: "DCA Bot",
         nonce,

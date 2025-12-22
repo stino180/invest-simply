@@ -22,9 +22,16 @@ const AssetDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
-  
+
   const { assets, isLoading, refetch } = useCryptoPrices();
   const { holdings, usdcBalance } = useWalletData();
+
+  const handleBack = () => {
+    // If user opened this page directly (no in-app history), navigate(-1) won't work.
+    const idx = (window.history.state as any)?.idx ?? 0;
+    if (idx > 0) navigate(-1);
+    else navigate('/assets');
+  };
   
   // Find asset by symbol (case insensitive)
   const asset = assets.find(a => a.symbol.toLowerCase() === id?.toLowerCase());
@@ -35,7 +42,7 @@ const AssetDetail = () => {
     return (
       <AppShell hideNav>
         <div className="p-4 safe-top">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2">
+          <button onClick={handleBack} className="p-2 -ml-2" aria-label="Go back"> 
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div className="space-y-4 mt-6">
@@ -55,7 +62,7 @@ const AssetDetail = () => {
     return (
       <AppShell hideNav>
         <div className="p-4 safe-top">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2">
+          <button onClick={handleBack} className="p-2 -ml-2" aria-label="Go back">
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div className="text-center py-12 text-muted-foreground">
@@ -75,7 +82,7 @@ const AssetDetail = () => {
         <div className="p-4 safe-top">
           <div className="flex items-center justify-between mb-6">
             <button 
-              onClick={() => navigate(-1)} 
+              onClick={handleBack}
               className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors"
               aria-label="Go back"
             >
