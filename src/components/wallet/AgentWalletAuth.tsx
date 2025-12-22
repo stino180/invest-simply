@@ -22,8 +22,9 @@ const APPROVE_AGENT_TYPES = {
   ],
 };
 
-const hexToRsv = (signature: string) => {
-  const sig = signature.startsWith('0x') ? signature.slice(2) : signature;
+// Hyperliquid expects signature as {r, s, v} with hex strings
+const parseSignature = (signatureHex: string) => {
+  const sig = signatureHex.startsWith('0x') ? signatureHex.slice(2) : signatureHex;
   if (sig.length !== 130) throw new Error('Invalid signature length');
   const r = `0x${sig.slice(0, 64)}`;
   const s = `0x${sig.slice(64, 128)}`;
@@ -130,9 +131,9 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         params: [walletAddress, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
       });
 
-      const signature = hexToRsv(signatureHex);
+      const signature = parseSignature(signatureHex);
 
-      // Submit to Hyperliquid
+      // Submit to Hyperliquid - format per their API spec
       const action = {
         type: "approveAgent",
         hyperliquidChain,
@@ -146,12 +147,19 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
-          signature,
           nonce,
+          signature,
         }),
       });
 
-      const result = await response.json();
+      // Handle non-JSON error responses
+      const responseText = await response.text();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        throw new Error(responseText || `HTTP ${response.status}`);
+      }
 
       if (result.status === 'err') {
         throw new Error(result.response || 'Failed to approve agent');
