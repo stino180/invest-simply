@@ -282,8 +282,24 @@ serve(async (req) => {
     // Ensure user has an agent wallet (create one if needed)
     const agentWallet = await ensureAgentWallet(supabase, typedProfile);
 
-    // IMPORTANT: agent wallets must be approved on Hyperliquid by the user's main wallet
-    if (!typedProfile.agent_wallet_authorized_at) {
+    // Re-fetch authorization status after ensureAgentWallet, because ensureAgentWallet
+    // may rotate keys/addresses and the original typedProfile can be stale.
+    const { data: authProfile, error: authProfileError } = await supabase
+      .from("profiles")
+      .select("agent_wallet_address, agent_wallet_authorized_at")
+      .eq("id", profileId)
+      .single();
+
+    if (authProfileError || !authProfile) {
+      throw new Error("Failed to verify agent wallet authorization status");
+    }
+
+    const dbAgentAddress = (authProfile.agent_wallet_address as string | null) ?? null;
+    const dbAuthorizedAt = (authProfile.agent_wallet_authorized_at as string | null) ?? null;
+
+    // IMPORTANT: agent wallets must be approved on Hyperliquid by the user's main wallet.
+    // If the agent wallet rotated, dbAuthorizedAt will be null.
+    if (!dbAuthorizedAt || !dbAgentAddress || dbAgentAddress.toLowerCase() !== agentWallet.address.toLowerCase()) {
       throw new Error(
         "Agent wallet not authorized yet. Open Wallet → Authorize Agent Wallet, then try again."
       );
