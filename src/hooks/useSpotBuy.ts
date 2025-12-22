@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { toast } from 'sonner';
-
 interface SpotBuyResult {
   success: boolean;
   orderId?: string;
@@ -43,6 +43,21 @@ export const useSpotBuy = () => {
       });
 
       if (error) {
+        // Supabase returns a FunctionsHttpError for non-2xx responses.
+        // The actual error payload is in the Response body; extract it for a friendly message.
+        if (error instanceof FunctionsHttpError) {
+          const res = (error as any).context as Response | undefined;
+          if (res) {
+            try {
+              const payload = await res.clone().json();
+              const message = payload?.error || payload?.message;
+              if (message) throw new Error(String(message));
+            } catch {
+              // fall through to default throw below
+            }
+          }
+        }
+
         throw error;
       }
 
