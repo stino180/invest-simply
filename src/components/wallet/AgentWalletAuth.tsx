@@ -113,7 +113,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         hyperliquidChain,
         agentAddress,
         agentName: "DCA Bot",
-        nonce: BigInt(nonce),
+        nonce,
       };
 
       // Request signature from wallet
@@ -124,10 +124,10 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         message,
       };
 
-      // Sign with the wallet
+      // Sign with the wallet (use replacer to handle any BigInt values)
       const signatureHex = await provider.request({
         method: 'eth_signTypedData_v4',
-        params: [walletAddress, JSON.stringify(typedData)],
+        params: [walletAddress, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
       });
 
       const signature = hexToRsv(signatureHex);
