@@ -22,6 +22,17 @@ const APPROVE_AGENT_TYPES = {
   ],
 };
 
+// Split signature hex into r, s, v components for Hyperliquid API
+const splitSignature = (signatureHex: string): { r: string; s: string; v: number } => {
+  const sig = signatureHex.startsWith('0x') ? signatureHex.slice(2) : signatureHex;
+  if (sig.length !== 130) throw new Error('Invalid signature length');
+  const r = `0x${sig.slice(0, 64)}`;
+  const s = `0x${sig.slice(64, 128)}`;
+  let v = parseInt(sig.slice(128, 130), 16);
+  if (v < 27) v += 27;
+  return { r, s, v };
+};
+
 
 export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps) => {
   const { profile } = usePrivyAuth();
@@ -38,8 +49,9 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     ? 'https://api.hyperliquid-testnet.xyz/exchange'
     : 'https://api.hyperliquid.xyz/exchange';
 
-  // Hyperliquid user-signed typed data uses this chainId (per their signing spec)
-  const signatureChainId = 0x66eee;
+  // Hyperliquid signature chain IDs (per their signing spec)
+  const signatureChainId = isTestnet ? '0x66eee' : '0xa4b1';
+  const signatureChainIdNum = parseInt(signatureChainId, 16);
 
   useEffect(() => {
     fetchAgentStatus();
@@ -96,7 +108,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       const domain = {
         name: "HyperliquidSignTransaction",
         version: "1",
-        chainId: signatureChainId,
+        chainId: signatureChainIdNum,
         verifyingContract: "0x0000000000000000000000000000000000000000" as const,
       };
 
@@ -121,14 +133,20 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         params: [walletAddress, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
       });
 
-      // Submit to Hyperliquid - their endpoint expects the signature as a single hex string
+      // Split signature into r, s, v components (Hyperliquid API format)
+      const signature = splitSignature(signatureHex);
+
+      // Build the action with signatureChainId per Hyperliquid API spec
       const action = {
         type: "approveAgent",
         hyperliquidChain,
+        signatureChainId,
         agentAddress,
         agentName: "DCA Bot",
         nonce,
       };
+
+      console.log('Sending to Hyperliquid:', { action, nonce, signature });
 
       const response = await fetch(hyperliquidApiUrl, {
         method: 'POST',
@@ -136,7 +154,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         body: JSON.stringify({
           action,
           nonce,
-          signature: signatureHex,
+          signature,
         }),
       });
 
