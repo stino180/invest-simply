@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -37,6 +38,7 @@ export const PurchaseModal = ({
   onConfirm,
   balance 
 }: PurchaseModalProps) => {
+  const navigate = useNavigate();
   const [amount, setAmount] = useState<string>('50');
   const [isSuccess, setIsSuccess] = useState(false);
   const [purchasedAmount, setPurchasedAmount] = useState<number>(0);
@@ -131,7 +133,7 @@ export const PurchaseModal = ({
                         type="button"
                         onClick={() => {
                           onClose();
-                          window.location.assign('/wallet');
+                          navigate('/wallet');
                         }}
                         className="mt-2 underline underline-offset-4"
                       >

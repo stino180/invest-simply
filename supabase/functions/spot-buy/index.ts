@@ -308,8 +308,9 @@ serve(async (req) => {
     // IMPORTANT: agent wallets must be approved on Hyperliquid by the user's main wallet.
     // If the agent wallet rotated, dbAuthorizedAt will be null.
     if (!dbAuthorizedAt || !dbAgentAddress || dbAgentAddress.toLowerCase() !== agentWallet.address.toLowerCase()) {
-      throw new Error(
-        "Agent wallet not authorized yet. Open Wallet → Authorize Agent Wallet, then try again."
+      throw new HttpError(
+        "Agent wallet not authorized yet. Open Wallet → Authorize Agent Wallet, then try again.",
+        409
       );
     }
 
