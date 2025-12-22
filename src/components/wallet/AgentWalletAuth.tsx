@@ -22,16 +22,6 @@ const APPROVE_AGENT_TYPES = {
   ],
 };
 
-// Hyperliquid expects signature as {r, s, v} with hex strings
-const parseSignature = (signatureHex: string) => {
-  const sig = signatureHex.startsWith('0x') ? signatureHex.slice(2) : signatureHex;
-  if (sig.length !== 130) throw new Error('Invalid signature length');
-  const r = `0x${sig.slice(0, 64)}`;
-  const s = `0x${sig.slice(64, 128)}`;
-  let v = parseInt(sig.slice(128, 130), 16);
-  if (v < 27) v += 27;
-  return { r, s, v };
-};
 
 export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps) => {
   const { profile } = usePrivyAuth();
@@ -131,9 +121,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         params: [walletAddress, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
       });
 
-      const signature = parseSignature(signatureHex);
-
-      // Submit to Hyperliquid - format per their API spec
+      // Submit to Hyperliquid - their endpoint expects the signature as a single hex string
       const action = {
         type: "approveAgent",
         hyperliquidChain,
@@ -148,7 +136,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         body: JSON.stringify({
           action,
           nonce,
-          signature,
+          signature: signatureHex,
         }),
       });
 
