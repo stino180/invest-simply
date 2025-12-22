@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import msgpack from "https://esm.sh/msgpack-lite@0.1.26";
+import { encode as msgpackEncode } from "https://esm.sh/@msgpack/msgpack@3.1.1";
 import { keccak256, toHex } from "https://esm.sh/viem@2.21.0";
 import { privateKeyToAccount, generatePrivateKey } from "https://esm.sh/viem@2.21.0/accounts";
 
@@ -196,7 +196,7 @@ async function signL1ActionWithAgentWallet(params: {
   const { privateKey, action, nonce, isMainnet, vaultAddress } = params;
 
   // 1) msgpack encode action
-  const actionBytes = msgpack.encode(action) as Uint8Array;
+  const actionBytes = msgpackEncode(action) as Uint8Array;
 
   // 2) append vault address (20 bytes, all zeros if null)
   const vaultBytes = vaultAddress
