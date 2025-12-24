@@ -101,8 +101,10 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     try {
       // Get the wallet provider
       const provider = await externalWallet.getEthereumProvider();
-      const walletAddress = externalWallet.address;
-      const walletAddressLower = walletAddress.toLowerCase();
+
+      // Privy/connector “expected” address
+      const expectedWalletAddress = externalWallet.address;
+      const expectedWalletAddressLower = expectedWalletAddress.toLowerCase();
       const agentAddressLower = agentAddress.toLowerCase();
 
       // Switch wallet to the correct Arbitrum chain before signing
@@ -139,6 +141,19 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         }
       }
 
+      // IMPORTANT: sign with the wallet’s currently selected account (not just what the connector reports)
+      const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
+      const signerAddress = accounts?.[0];
+      if (!signerAddress) {
+        throw new Error('No active wallet account found. Please unlock your wallet and try again.');
+      }
+      const signerAddressLower = signerAddress.toLowerCase();
+
+      if (signerAddressLower !== expectedWalletAddressLower) {
+        throw new Error(
+          `Wallet account mismatch. Your wallet is currently set to ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} but the app expects ${expectedWalletAddress.slice(0, 10)}...${expectedWalletAddress.slice(-8)}. Switch accounts in your wallet and try again.`
+        );
+      }
       const nonce = Date.now();
       const hyperliquidChain = isTestnet ? 'Testnet' : 'Mainnet';
 
@@ -168,7 +183,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       // Sign with the wallet (use replacer to handle any BigInt values)
       const signatureHex = await provider.request({
         method: 'eth_signTypedData_v4',
-        params: [walletAddressLower, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
+        params: [signerAddressLower, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
       });
 
       // Split signature into r, s, v components (Hyperliquid API format)
@@ -187,8 +202,10 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       console.log('Hyperliquid approveAgent debug:', {
         networkMode,
         hyperliquidApiUrl,
-        walletAddress,
-        walletAddressLower,
+        expectedWalletAddress,
+        expectedWalletAddressLower,
+        signerAddress,
+        signerAddressLower,
         agentAddress,
         agentAddressLower,
         action,
