@@ -102,6 +102,8 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       // Get the wallet provider
       const provider = await externalWallet.getEthereumProvider();
       const walletAddress = externalWallet.address;
+      const walletAddressLower = walletAddress.toLowerCase();
+      const agentAddressLower = agentAddress.toLowerCase();
 
       // Switch wallet to the correct Arbitrum chain before signing
       const targetChainIdHex = signatureChainIdHex;
@@ -150,7 +152,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
 
       const message = {
         hyperliquidChain,
-        agentAddress,
+        agentAddress: agentAddressLower,
         agentName: "DCA Bot",
         nonce,
       };
@@ -166,7 +168,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       // Sign with the wallet (use replacer to handle any BigInt values)
       const signatureHex = await provider.request({
         method: 'eth_signTypedData_v4',
-        params: [walletAddress, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
+        params: [walletAddressLower, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
       });
 
       // Split signature into r, s, v components (Hyperliquid API format)
@@ -177,12 +179,22 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         type: "approveAgent",
         hyperliquidChain,
         signatureChainId: signatureChainIdHex,
-        agentAddress,
+        agentAddress: agentAddressLower,
         agentName: "DCA Bot",
         nonce,
       };
 
-      console.log('Sending to Hyperliquid:', { action, nonce, signature });
+      console.log('Hyperliquid approveAgent debug:', {
+        networkMode,
+        hyperliquidApiUrl,
+        walletAddress,
+        walletAddressLower,
+        agentAddress,
+        agentAddressLower,
+        action,
+        nonce,
+        signature,
+      });
 
       const response = await fetch(hyperliquidApiUrl, {
         method: 'POST',
