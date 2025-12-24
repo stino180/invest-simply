@@ -204,7 +204,15 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       }
 
       if (result.status === 'err') {
-        throw new Error(result.response || 'Failed to approve agent');
+        const errorMsg = result.response || 'Failed to approve agent';
+        
+        // Check for specific Hyperliquid errors
+        if (errorMsg.includes('Must deposit before performing actions')) {
+          const network = isTestnet ? 'testnet' : 'mainnet';
+          throw new Error(`You must deposit funds to Hyperliquid ${network} before authorizing an agent. Visit the Hyperliquid app to deposit first.`);
+        }
+        
+        throw new Error(errorMsg);
       }
 
       // Register authorization in our backend
