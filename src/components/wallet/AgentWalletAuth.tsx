@@ -49,9 +49,11 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     ? 'https://api.hyperliquid-testnet.xyz/exchange'
     : 'https://api.hyperliquid.xyz/exchange';
 
-  // Hyperliquid signature chain IDs (per their signing spec)
-  // Use a NUMBER everywhere (typed-data domain + API body) to avoid JSON deserialization issues.
-  const signatureChainIdNum = isTestnet ? 421614 : 42161; // 0x66eee (Arb Sepolia), 0xa4b1 (Arb One)
+  // Hyperliquid signature chain IDs
+  // - For signing (EIP-712 domain) we use a NUMBER
+  // - For the exchange API request body we must send the chain id in HEX string form (per docs)
+  const signatureChainIdNum = isTestnet ? 421614 : 42161; // Arbitrum Sepolia / Arbitrum One
+  const signatureChainIdHex = `0x${signatureChainIdNum.toString(16)}`;
 
   useEffect(() => {
     fetchAgentStatus();
@@ -102,7 +104,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       const walletAddress = externalWallet.address;
 
       // Switch wallet to the correct Arbitrum chain before signing
-      const targetChainIdHex = `0x${signatureChainIdNum.toString(16)}`;
+      const targetChainIdHex = signatureChainIdHex;
       try {
         await provider.request({
           method: 'wallet_switchEthereumChain',
@@ -174,7 +176,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       const action = {
         type: "approveAgent",
         hyperliquidChain,
-        signatureChainId: signatureChainIdNum,
+        signatureChainId: signatureChainIdHex,
         agentAddress,
         agentName: "DCA Bot",
         nonce,
