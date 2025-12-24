@@ -26,9 +26,8 @@ const Wallet = () => {
 
   const walletAddress = userWallet || '0x742d...8cB2a';
   
-  // Check if using external wallet (not Privy embedded)
-  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
-  const isExternalWallet = !embeddedWallet && wallets.length > 0;
+  // Show agent authorization when an external wallet is connected (even if an embedded wallet also exists)
+  const isExternalWallet = wallets.some(w => w.walletClientType !== 'privy');
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);

@@ -33,7 +33,11 @@ export const PrivyAuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
-  const walletAddress = embeddedWallet?.address || user?.wallet?.address || null;
+  const externalWallet = wallets.find(w => w.walletClientType !== 'privy');
+
+  // Prefer the user-selected external wallet when present (matches what you connect in MetaMask/Rainbow),
+  // otherwise fall back to the embedded wallet.
+  const walletAddress = externalWallet?.address || embeddedWallet?.address || user?.wallet?.address || null;
 
   const syncWithBackend = async () => {
     if (!authenticated || !user) {
