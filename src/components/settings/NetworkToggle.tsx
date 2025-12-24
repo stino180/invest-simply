@@ -14,8 +14,15 @@ export const NetworkToggle = () => {
   const isTestnet = profile?.network_mode === 'testnet';
 
   const handleToggle = async () => {
-    if (!profile) return;
-    
+    if (!profile) {
+      toast({
+        title: 'Connect a wallet',
+        description: 'Log in first to switch between testnet and mainnet.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSaving(true);
     const newMode = isTestnet ? 'mainnet' : 'testnet';
     
@@ -63,10 +70,10 @@ export const NetworkToggle = () => {
       <div className="flex items-center gap-3">
         <div className={cn(
           'w-10 h-10 rounded-xl flex items-center justify-center',
-          isTestnet ? 'bg-yellow-500/20' : 'bg-primary/20'
+          isTestnet ? 'bg-accent/30' : 'bg-primary/20'
         )}>
           {isTestnet ? (
-            <TestTube className="w-5 h-5 text-yellow-500" />
+            <TestTube className="w-5 h-5 text-accent-foreground" />
           ) : (
             <Globe className="w-5 h-5 text-primary" />
           )}
