@@ -101,6 +101,40 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       const provider = await externalWallet.getEthereumProvider();
       const walletAddress = externalWallet.address;
 
+      // Switch wallet to the correct Arbitrum chain before signing
+      const targetChainIdHex = `0x${signatureChainIdNum.toString(16)}`;
+      try {
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: targetChainIdHex }],
+        });
+      } catch (switchError: any) {
+        // If chain not added, add it
+        if (switchError.code === 4902) {
+          const chainConfig = isTestnet
+            ? {
+                chainId: targetChainIdHex,
+                chainName: 'Arbitrum Sepolia',
+                nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
+                blockExplorerUrls: ['https://sepolia.arbiscan.io'],
+              }
+            : {
+                chainId: targetChainIdHex,
+                chainName: 'Arbitrum One',
+                nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+                blockExplorerUrls: ['https://arbiscan.io'],
+              };
+          await provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [chainConfig],
+          });
+        } else {
+          throw switchError;
+        }
+      }
+
       const nonce = Date.now();
       const hyperliquidChain = isTestnet ? 'Testnet' : 'Mainnet';
 
