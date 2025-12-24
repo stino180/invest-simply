@@ -50,8 +50,8 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     : 'https://api.hyperliquid.xyz/exchange';
 
   // Hyperliquid signature chain IDs (per their signing spec)
-  const signatureChainId = isTestnet ? '0x66eee' : '0xa4b1';
-  const signatureChainIdNum = parseInt(signatureChainId, 16);
+  // Use a NUMBER everywhere (typed-data domain + API body) to avoid JSON deserialization issues.
+  const signatureChainIdNum = isTestnet ? 421614 : 42161; // 0x66eee (Arb Sepolia), 0xa4b1 (Arb One)
 
   useEffect(() => {
     fetchAgentStatus();
@@ -140,7 +140,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       const action = {
         type: "approveAgent",
         hyperliquidChain,
-        signatureChainId,
+        signatureChainId: signatureChainIdNum,
         agentAddress,
         agentName: "DCA Bot",
         nonce,
