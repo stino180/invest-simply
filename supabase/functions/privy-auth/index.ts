@@ -128,33 +128,34 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existingProfile) {
-      // Update wallet address if changed
-      if (walletAddress && existingProfile.wallet_address !== walletAddress) {
-        console.log(`Wallet address changed from ${existingProfile.wallet_address} to ${walletAddress}`);
-        // When wallet changes, agent authorization is invalidated since Hyperliquid
-        // agent approvals are tied to the approving wallet
-        await supabase
-          .from('profiles')
-          .update({ 
-            wallet_address: walletAddress,
-            agent_wallet_authorized_at: null  // Require re-authorization with new wallet
-          })
-          .eq('id', existingProfile.id);
+      // IMPORTANT: Don't silently switch the stored wallet address.
+      // If a user connects a different wallet in their wallet app, we keep the original
+      // profile.wallet_address and require them to reconnect the correct wallet for trading.
+      if (walletAddress) {
+        if (!existingProfile.wallet_address) {
+          console.log(`Setting initial wallet address for profile: ${walletAddress}`);
+          await supabase
+            .from('profiles')
+            .update({ wallet_address: walletAddress })
+            .eq('id', existingProfile.id);
+        } else if (existingProfile.wallet_address !== walletAddress) {
+          console.warn(
+            `Connected wallet (${walletAddress}) differs from profile wallet (${existingProfile.wallet_address}). Not updating profile wallet automatically.`
+          );
+          // Also invalidate agent authorization so we don't accidentally treat the wrong wallet as approved.
+          await supabase
+            .from('profiles')
+            .update({ agent_wallet_authorized_at: null })
+            .eq('id', existingProfile.id);
+        }
       }
 
       console.log('Existing user logged in:', existingProfile.id);
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          profile: { 
-            ...existingProfile, 
-            wallet_address: walletAddress || existingProfile.wallet_address,
-            // If wallet changed, auth is now null
-            agent_wallet_authorized_at: (walletAddress && existingProfile.wallet_address !== walletAddress) 
-              ? null 
-              : existingProfile.agent_wallet_authorized_at
-          },
-          isNewUser: false 
+        JSON.stringify({
+          success: true,
+          profile: existingProfile,
+          isNewUser: false,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

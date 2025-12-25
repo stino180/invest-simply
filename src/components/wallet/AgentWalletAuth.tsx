@@ -386,6 +386,10 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
   }
 
   const hasExternalWallet = !!preferredExternalWallet;
+  const isWalletMismatch =
+    !!profile?.wallet_address &&
+    !!preferredExternalWallet?.address &&
+    preferredExternalWallet.address.toLowerCase() !== profile.wallet_address.toLowerCase();
 
   return (
     <Card>
@@ -448,12 +452,19 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              No external wallet connected. Please connect a wallet like MetaMask to authorize.
+              No external wallet connected. Please connect a wallet like Rainbow to authorize.
+            </AlertDescription>
+          </Alert>
+        ) : isWalletMismatch ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Your connected wallet does not match the profile wallet. Switch your Rainbow account to match the Profile wallet above, then try again.
             </AlertDescription>
           </Alert>
         ) : (
           <div className="space-y-3">
-            <Button 
+            <Button
               onClick={handleAuthorize}
               disabled={isAuthorizing}
               className="w-full"
