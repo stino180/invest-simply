@@ -112,14 +112,15 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       // Get the wallet provider
       const provider = await externalWallet.getEthereumProvider();
 
-      // Privy/connector "expected" address
-      const expectedWalletAddress = externalWallet.address;
+      // We MUST sign with the same wallet that has funds on Hyperliquid.
+      // Prefer the profile wallet if present; otherwise fall back to the selected external wallet.
+      const expectedWalletAddress = profile?.wallet_address || externalWallet.address;
       const expectedWalletAddressLower = expectedWalletAddress.toLowerCase();
       const agentAddressLower = agentAddress.toLowerCase();
 
       // Note: EIP-712 signing doesn't require being on a specific chain - the chainId is in the domain
 
-      // IMPORTANT: sign with the wallet's currently selected account (not just what the connector reports)
+      // IMPORTANT: sign with the wallet's currently selected account
       const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
       const signerAddress = accounts?.[0];
       if (!signerAddress) {
@@ -129,7 +130,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
 
       if (signerAddressLower !== expectedWalletAddressLower) {
         throw new Error(
-          `Wallet account mismatch. Your wallet is currently set to ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} but the app expects ${expectedWalletAddress.slice(0, 10)}...${expectedWalletAddress.slice(-8)}. Switch accounts in your wallet and try again.`
+          `Wallet mismatch. Your wallet is currently set to ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} but the app/profile expects ${expectedWalletAddress.slice(0, 10)}...${expectedWalletAddress.slice(-8)}. Switch accounts in Rainbow and try again.`
         );
       }
       
@@ -407,28 +408,39 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         </Alert>
 
         {agentAddress && (
-          <div className="text-xs text-muted-foreground space-y-1">
-            <div>
-              Agent address:{' '}
-              <code className="bg-secondary px-1 rounded">{agentAddress.slice(0, 10)}...{agentAddress.slice(-8)}</code>
-            </div>
-            {hasExternalWallet ? (
-              <div className="space-y-1">
-                <div>
-                  Profile wallet:{' '}
-                  <code className="bg-secondary px-1 rounded">
-                    {profile?.wallet_address ? `${profile.wallet_address.slice(0, 10)}...${profile.wallet_address.slice(-8)}` : '—'}
-                  </code>
-                </div>
-                <div>
-                  Connected wallet:{' '}
-                  <code className="bg-secondary px-1 rounded">
-                    {preferredExternalWallet?.address ? `${preferredExternalWallet.address.slice(0, 10)}...${preferredExternalWallet.address.slice(-8)}` : '—'}
-                  </code>
-                  <span className="ml-2">({isTestnet ? 'testnet' : 'mainnet'})</span>
-                </div>
+          <div className="text-xs text-muted-foreground space-y-2">
+            <div className="space-y-1">
+              <div>
+                Agent address:{' '}
+                <code className="bg-secondary px-1 rounded">{agentAddress.slice(0, 10)}...{agentAddress.slice(-8)}</code>
               </div>
-            ) : null}
+              <div>
+                Profile wallet:{' '}
+                <code className="bg-secondary px-1 rounded">
+                  {profile?.wallet_address ? `${profile.wallet_address.slice(0, 10)}...${profile.wallet_address.slice(-8)}` : '—'}
+                </code>
+              </div>
+              <div>
+                Selected external wallet:{' '}
+                <code className="bg-secondary px-1 rounded">
+                  {preferredExternalWallet?.address ? `${preferredExternalWallet.address.slice(0, 10)}...${preferredExternalWallet.address.slice(-8)}` : '—'}
+                </code>
+                <span className="ml-2">({isTestnet ? 'testnet' : 'mainnet'})</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div>Connected external wallets:</div>
+              <ul className="list-disc pl-4 space-y-0.5">
+                {wallets
+                  .filter((w) => w.walletClientType !== 'privy')
+                  .map((w) => (
+                    <li key={w.address}>
+                      <code className="bg-secondary px-1 rounded">{w.address?.slice(0, 10)}...{w.address?.slice(-8)}</code>
+                    </li>
+                  ))}
+              </ul>
+            </div>
           </div>
         )}
 
