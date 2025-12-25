@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Shield, Check, AlertCircle, Loader2 } from 'lucide-react';
-import { recoverTypedDataAddress } from 'viem';
+import { recoverAddress, hashTypedData, type Hex } from 'viem';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -243,12 +243,15 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       });
 
       // Sanity-check: verify the signature recovers the same address we think we signed with.
-      const recovered = (await recoverTypedDataAddress({
+      const messageHash = hashTypedData({
         domain: typedData.domain,
         types: typedData.types as any,
         primaryType: typedData.primaryType as any,
         message: typedData.message,
-        signature: signatureHex as `0x${string}`,
+      });
+      const recovered = (await recoverAddress({
+        hash: messageHash,
+        signature: signatureHex as Hex,
       })).toLowerCase();
 
       if (recovered !== signerAddressLower) {
