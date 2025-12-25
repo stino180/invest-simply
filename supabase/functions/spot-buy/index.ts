@@ -29,6 +29,38 @@ class HttpError extends Error {
   }
 }
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_DELAY_MS = 500;
+
+// Retry with exponential backoff for network requests
+async function fetchWithRetry(
+  url: string, 
+  options: RequestInit, 
+  retries = MAX_RETRIES
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      // Don't retry on HTTP errors (4xx, 5xx) - only on network failures
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Fetch attempt ${attempt + 1}/${retries} failed:`, lastError.message);
+      
+      if (attempt < retries - 1) {
+        const delay = INITIAL_DELAY_MS * Math.pow(2, attempt);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error("Fetch failed after retries");
+}
+
 // Network URLs
 const MAINNET_INFO_URL = "https://api.hyperliquid.xyz/info";
 const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
@@ -120,12 +152,11 @@ async function ensureAgentWallet(
   return await rotateAgentWallet();
 }
 
-// Get current price from Hyperliquid
+// Get current price from Hyperliquid with retry
 async function getSpotPrice(asset: string, networkMode: string): Promise<number> {
   const infoUrl = networkMode === "testnet" ? TESTNET_INFO_URL : MAINNET_INFO_URL;
 
-  // Just use allMids for now (these are the mids shown in our UI)
-  const midsResponse = await fetch(infoUrl, {
+  const midsResponse = await fetchWithRetry(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: "allMids" }),
@@ -145,11 +176,11 @@ async function getSpotPrice(asset: string, networkMode: string): Promise<number>
   return parseFloat(price);
 }
 
-// Perps use meta.universe index as the asset id
+// Perps use meta.universe index as the asset id (with retry)
 async function getPerpAssetId(asset: string, networkMode: string): Promise<number> {
   const infoUrl = networkMode === "testnet" ? TESTNET_INFO_URL : MAINNET_INFO_URL;
 
-  const metaResponse = await fetch(infoUrl, {
+  const metaResponse = await fetchWithRetry(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: "meta" }),
@@ -404,7 +435,7 @@ serve(async (req) => {
 
     console.log("Submitting spot order to Hyperliquid...");
 
-    const response = await fetch(exchangeUrl, {
+    const response = await fetchWithRetry(exchangeUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody)
@@ -449,25 +480,46 @@ serve(async (req) => {
                     result.response?.data?.statuses?.[0]?.filled?.oid ||
                     `spot-${timestamp}`;
 
-    // Record the transaction
-    const { error: txError } = await supabase
-      .from("wallet_transactions")
-      .insert({
-        user_id: profileId,
-        type: "buy",
-        asset: asset,
-        symbol: asset,
-        amount: parseFloat(formattedSize),
-        price: currentPrice,
-        total: amountUsd,
-        timestamp: new Date().toISOString(),
-        status: "completed",
-        hyperliquid_tx_hash: orderId
-      });
+    // Record the transaction with retry for failed inserts
+    let txRecorded = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error: txError } = await supabase
+        .from("wallet_transactions")
+        .insert({
+          user_id: profileId,
+          type: "buy",
+          asset: asset,
+          symbol: asset,
+          amount: parseFloat(formattedSize),
+          price: currentPrice,
+          total: amountUsd,
+          timestamp: new Date().toISOString(),
+          status: "completed",
+          hyperliquid_tx_hash: orderId
+        });
 
-    if (txError) {
-      console.error("Error recording transaction:", txError);
-      // Don't throw - transaction succeeded even if recording failed
+      if (!txError) {
+        txRecorded = true;
+        break;
+      }
+      
+      console.error(`Transaction recording attempt ${attempt + 1}/3 failed:`, txError);
+      if (attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt)));
+      }
+    }
+
+    if (!txRecorded) {
+      // Log critical warning - trade succeeded but record failed
+      console.error("CRITICAL: Trade succeeded but failed to record transaction after retries", {
+        profileId,
+        orderId,
+        asset,
+        amountUsd,
+        amountCrypto: parseFloat(formattedSize),
+        price: currentPrice,
+        timestamp: new Date().toISOString()
+      });
     }
 
     console.log(`Spot buy successful: ${formattedSize} ${asset} @ $${currentPrice}`);

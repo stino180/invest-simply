@@ -6,9 +6,13 @@ interface PrivyProviderProps {
 }
 
 export const PrivyProvider = ({ children }: PrivyProviderProps) => {
-  // Privy App ID is a publishable key (safe for frontend)
-  const appId = 'cmj7gqfzb0334jp0c28ke1s5k';
+  // Privy App ID from environment variable (publishable key, safe for frontend)
+  const appId = import.meta.env.VITE_PRIVY_APP_ID || '';
 
+  if (!appId) {
+    console.error('VITE_PRIVY_APP_ID is not configured');
+    return <>{children}</>;
+  }
 
   return (
     <PrivyProviderBase

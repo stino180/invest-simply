@@ -28,6 +28,37 @@ interface Profile {
   agent_wallet_address: string | null;
 }
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_DELAY_MS = 500;
+
+// Retry with exponential backoff for network requests
+async function fetchWithRetry(
+  url: string, 
+  options: RequestInit, 
+  retries = MAX_RETRIES
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Fetch attempt ${attempt + 1}/${retries} failed:`, lastError.message);
+      
+      if (attempt < retries - 1) {
+        const delay = INITIAL_DELAY_MS * Math.pow(2, attempt);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error("Fetch failed after retries");
+}
+
 // Network URLs
 const MAINNET_INFO_URL = "https://api.hyperliquid.xyz/info";
 const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
@@ -44,11 +75,11 @@ const ASSET_META: Record<string, { index: number; szDecimals: number }> = {
   "LINK": { index: 6, szDecimals: 2 },
 };
 
-// Get current price from Hyperliquid
+// Get current price from Hyperliquid with retry
 async function getAssetPrice(asset: string, networkMode: string): Promise<number> {
   const infoUrl = networkMode === 'testnet' ? TESTNET_INFO_URL : MAINNET_INFO_URL;
   
-  const response = await fetch(infoUrl, {
+  const response = await fetchWithRetry(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: "allMids" })
@@ -265,7 +296,7 @@ async function executeHyperliquidOrder(
 
   console.log("Submitting order to Hyperliquid...");
 
-  const response = await fetch(exchangeUrl, {
+  const response = await fetchWithRetry(exchangeUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(requestBody)
