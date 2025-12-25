@@ -36,7 +36,7 @@ const splitSignature = (signatureHex: string): { r: string; s: string; v: number
 
 
 export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps) => {
-  const { profile } = usePrivyAuth();
+  const { profile, refreshProfile } = usePrivyAuth();
   const { wallets } = useWallets();
   const [agentAddress, setAgentAddress] = useState<string | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -94,6 +94,17 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       console.error('Error fetching agent status:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDisconnectExternalWallet = async () => {
+    try {
+      preferredExternalWallet?.disconnect?.();
+      await refreshProfile();
+      toast.success('Wallet disconnected. Reconnect and try again.');
+    } catch (e) {
+      console.error('Error disconnecting wallet:', e);
+      toast.error('Failed to disconnect wallet');
     }
   };
 
@@ -518,8 +529,9 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-xs space-y-2">
                   <div>{authError}</div>
-                  {authError.toLowerCase().includes('deposit funds') ? (
-                    <div className="flex flex-wrap gap-2">
+
+                  <div className="flex flex-wrap gap-2">
+                    {authError.toLowerCase().includes('deposit funds') ? (
                       <Button
                         type="button"
                         size="sm"
@@ -533,8 +545,20 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
                       >
                         Open Hyperliquid
                       </Button>
-                    </div>
-                  ) : null}
+                    ) : null}
+
+                    {authError.toLowerCase().includes('signature mismatch') ||
+                    authError.toLowerCase().includes('provider mismatch') ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleDisconnectExternalWallet}
+                      >
+                        Disconnect wallet
+                      </Button>
+                    ) : null}
+                  </div>
                 </AlertDescription>
               </Alert>
             ) : null}
