@@ -125,39 +125,68 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         );
       }
       // Preflight (server-side): verify Hyperliquid account exists / has funds for the signing address
+      // NOTE: Hyperliquid can have funds in *spot* even if marginSummary.accountValue is 0.
+      const fetchUserState = async (mode: 'mainnet' | 'testnet') => {
+        const { data, error } = await supabase.functions.invoke('hyperliquid-userstate', {
+          body: {
+            address: signerAddressLower,
+            networkMode: mode,
+          },
+        });
+        if (error) throw error;
+        return data?.userState;
+      };
+
+      const getSpotUsdValue = (userState: any): number => {
+        const balances = userState?.spotState?.balances;
+        if (!Array.isArray(balances)) return 0;
+        // If Hyperliquid includes a USD-equivalent field (varies), prefer it; otherwise just treat nonzero sizes as “funded”.
+        const byUsd = balances
+          .map((b: any) => Number(b?.usdValue ?? b?.valueUsd ?? b?.value ?? 0))
+          .filter((n: number) => Number.isFinite(n) && n > 0);
+        if (byUsd.length) return byUsd.reduce((a: number, n: number) => a + n, 0);
+
+        const hasNonZero = balances.some((b: any) => {
+          const total = Number(b?.total ?? b?.amount ?? b?.balance ?? 0);
+          return Number.isFinite(total) && total > 0;
+        });
+        return hasNonZero ? 1 : 0;
+      };
+
       try {
-        const { data: preflightData, error: preflightError } = await supabase.functions.invoke(
-          'hyperliquid-userstate',
-          {
-            body: {
-              address: signerAddressLower,
-              networkMode: isTestnet ? 'testnet' : 'mainnet',
-            },
-          }
-        );
+        const currentMode: 'mainnet' | 'testnet' = isTestnet ? 'testnet' : 'mainnet';
+        const otherMode: 'mainnet' | 'testnet' = isTestnet ? 'mainnet' : 'testnet';
 
-        if (preflightError) throw preflightError;
+        const userStateCurrent = await fetchUserState(currentMode);
+        const marginValue = Number(userStateCurrent?.marginSummary?.accountValue ?? 0);
+        const spotValue = getSpotUsdValue(userStateCurrent);
 
-        const accountValue = Number(preflightData?.userState?.marginSummary?.accountValue ?? 0);
         console.log('Hyperliquid preflight userState:', {
           networkMode,
           signerAddress: signerAddressLower,
-          accountValue,
-          userState: preflightData?.userState,
+          marginAccountValue: marginValue,
+          spotValue,
+          userState: userStateCurrent,
         });
 
-        // If Hyperliquid reports no account value, surface a very explicit message.
-        if (Number.isFinite(accountValue) && accountValue <= 0) {
-          const network = isTestnet ? 'testnet' : 'mainnet';
+        // If current network looks unfunded, check the other network to detect a mismatch.
+        if ((Number.isFinite(marginValue) && marginValue <= 0) && spotValue <= 0) {
+          const userStateOther = await fetchUserState(otherMode);
+          const otherMarginValue = Number(userStateOther?.marginSummary?.accountValue ?? 0);
+          const otherSpotValue = getSpotUsdValue(userStateOther);
+
+          if ((Number.isFinite(otherMarginValue) && otherMarginValue > 0) || otherSpotValue > 0) {
+            throw new Error(
+              `Your Hyperliquid funds appear to be on ${otherMode}, but the app is set to ${currentMode}. Switch the app network in Settings and try again.`
+            );
+          }
+
           throw new Error(
-            `Hyperliquid says this wallet has no deposit on ${network} (accountValue=${accountValue}). Make sure you deposited on ${network} with ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)}.`
+            `Hyperliquid shows no funds for this wallet on ${currentMode} (margin=${marginValue}, spot=${spotValue}). Make sure you deposited with ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} on ${currentMode}.`
           );
         }
       } catch (e: any) {
-        // If we get a clear preflight error, show it (better than the generic "Must deposit" later)
-        if (e?.message) {
-          throw e;
-        }
+        if (e?.message) throw e;
       }
 
       const nonce = Date.now();
