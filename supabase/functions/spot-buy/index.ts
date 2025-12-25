@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as msgpackEncode } from "https://esm.sh/@msgpack/msgpack@3.1.1";
 import { keccak256, toHex } from "https://esm.sh/viem@2.21.0";
 import { privateKeyToAccount, generatePrivateKey } from "https://esm.sh/viem@2.21.0/accounts";
+import { encode as hexEncode, decode as hexDecode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,8 +71,49 @@ const TESTNET_EXCHANGE_URL = "https://api.hyperliquid-testnet.xyz/exchange";
 // Spot assets use 10000 + spotMeta index
 const SPOT_ASSET_OFFSET = 10000;
 
-// Decrypt the stored private key
-function decryptPrivateKey(encrypted: string): string | null {
+// AES-256-GCM decryption for private keys
+async function decryptPrivateKey(encrypted: string, profileId: string): Promise<string | null> {
+  try {
+    const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
+    if (!encryptionKey) {
+      console.error("ENCRYPTION_KEY not configured");
+      return null;
+    }
+
+    // Derive the same key from encryption key + profileId
+    const keyMaterial = new TextEncoder().encode(encryptionKey + profileId);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", keyMaterial);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      hashBuffer,
+      { name: "AES-GCM" },
+      false,
+      ["decrypt"]
+    );
+
+    // Decode hex string
+    const combined = hexDecode(new TextEncoder().encode(encrypted));
+    
+    // Extract IV (first 12 bytes) and ciphertext
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+    
+    const plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      cryptoKey,
+      ciphertext
+    );
+
+    return new TextDecoder().decode(plaintext);
+  } catch (error) {
+    console.error("AES decryption failed:", error);
+    return null;
+  }
+}
+
+// Legacy decryption for migrating old base64-encoded keys
+function decryptLegacyKey(encrypted: string): string | null {
   try {
     const decoded = atob(encrypted);
     const parts = decoded.split(":");
@@ -84,10 +126,41 @@ function decryptPrivateKey(encrypted: string): string | null {
   }
 }
 
-// Encrypt a private key for storage
-function encryptPrivateKey(privateKey: string): string {
-  const salt = crypto.randomUUID();
-  return btoa(`${salt}:${privateKey}`);
+// AES-256-GCM encryption for private keys
+async function encryptPrivateKey(privateKey: string, profileId: string): Promise<string> {
+  const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
+  if (!encryptionKey) {
+    throw new Error("ENCRYPTION_KEY not configured");
+  }
+
+  // Derive a 256-bit key from the encryption key + profileId using SHA-256
+  const keyMaterial = new TextEncoder().encode(encryptionKey + profileId);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", keyMaterial);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    hashBuffer,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"]
+  );
+
+  // Generate a random 12-byte IV
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  
+  const plaintext = new TextEncoder().encode(privateKey);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    cryptoKey,
+    plaintext
+  );
+
+  // Combine IV + ciphertext and encode as hex
+  const combined = new Uint8Array(iv.length + new Uint8Array(ciphertext).length);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  
+  return new TextDecoder().decode(hexEncode(combined));
 }
 
 // Generate a new agent wallet and store it in the profile
@@ -99,7 +172,7 @@ async function ensureAgentWallet(
     console.log("Rotating agent wallet (missing/mismatched key)...");
     const newPrivateKey = generatePrivateKey();
     const account = privateKeyToAccount(newPrivateKey);
-    const encryptedKey = encryptPrivateKey(newPrivateKey);
+    const encryptedKey = await encryptPrivateKey(newPrivateKey, profile.id);
 
     const { error: updateError } = await supabase
       .from("profiles")
@@ -121,7 +194,23 @@ async function ensureAgentWallet(
 
   // If already has an agent wallet, decrypt and validate it
   if (profile.agent_wallet_private_key_encrypted && profile.agent_wallet_address) {
-    const privateKey = decryptPrivateKey(profile.agent_wallet_private_key_encrypted);
+    // Try AES-256-GCM decryption first, then legacy base64
+    let privateKey = await decryptPrivateKey(profile.agent_wallet_private_key_encrypted, profile.id);
+    
+    if (!privateKey) {
+      // Try legacy decryption for migration
+      privateKey = decryptLegacyKey(profile.agent_wallet_private_key_encrypted);
+      if (privateKey) {
+        console.log("Migrating legacy encrypted key to AES-256-GCM");
+        // Re-encrypt with new method
+        const newEncrypted = await encryptPrivateKey(privateKey, profile.id);
+        await supabase
+          .from("profiles")
+          .update({ agent_wallet_private_key_encrypted: newEncrypted })
+          .eq("id", profile.id);
+      }
+    }
+    
     if (privateKey) {
       const derived = privateKeyToAccount(privateKey as `0x${string}`).address;
       if (derived.toLowerCase() === profile.agent_wallet_address.toLowerCase()) {
