@@ -104,14 +104,14 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       // Get the wallet provider
       const provider = await externalWallet.getEthereumProvider();
 
-      // Privy/connector “expected” address
+      // Privy/connector "expected" address
       const expectedWalletAddress = externalWallet.address;
       const expectedWalletAddressLower = expectedWalletAddress.toLowerCase();
       const agentAddressLower = agentAddress.toLowerCase();
 
       // Note: EIP-712 signing doesn't require being on a specific chain - the chainId is in the domain
 
-      // IMPORTANT: sign with the wallet’s currently selected account (not just what the connector reports)
+      // IMPORTANT: sign with the wallet's currently selected account (not just what the connector reports)
       const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
       const signerAddress = accounts?.[0];
       if (!signerAddress) {
@@ -124,6 +124,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
           `Wallet account mismatch. Your wallet is currently set to ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} but the app expects ${expectedWalletAddress.slice(0, 10)}...${expectedWalletAddress.slice(-8)}. Switch accounts in your wallet and try again.`
         );
       }
+      
       // Preflight (server-side): verify Hyperliquid account exists / has funds for the signing address
       // NOTE: Hyperliquid can have funds in *spot* even if marginSummary.accountValue is 0.
       const fetchUserState = async (mode: 'mainnet' | 'testnet') => {
@@ -134,18 +135,25 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
           },
         });
         if (error) throw error;
-        return data?.userState;
+        // Return full response with both perpsState and spotState
+        return {
+          perpsState: data?.perpsState,
+          spotState: data?.spotState,
+        };
       };
 
-      const getSpotUsdValue = (userState: any): number => {
-        const balances = userState?.spotState?.balances;
+      const getSpotUsdValue = (state: { perpsState?: any; spotState?: any }): number => {
+        const balances = state?.spotState?.balances;
         if (!Array.isArray(balances)) return 0;
-        // If Hyperliquid includes a USD-equivalent field (varies), prefer it; otherwise just treat nonzero sizes as “funded”.
-        const byUsd = balances
-          .map((b: any) => Number(b?.usdValue ?? b?.valueUsd ?? b?.value ?? 0))
-          .filter((n: number) => Number.isFinite(n) && n > 0);
-        if (byUsd.length) return byUsd.reduce((a: number, n: number) => a + n, 0);
-
+        
+        // Check for USDC balance specifically
+        const usdcBalance = balances.find((b: any) => b?.coin === 'USDC');
+        if (usdcBalance) {
+          const total = Number(usdcBalance?.total ?? 0);
+          if (total > 0) return total;
+        }
+        
+        // Fallback: check if any balance has non-zero amount
         const hasNonZero = balances.some((b: any) => {
           const total = Number(b?.total ?? b?.amount ?? b?.balance ?? 0);
           return Number.isFinite(total) && total > 0;
@@ -158,7 +166,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         const otherMode: 'mainnet' | 'testnet' = isTestnet ? 'mainnet' : 'testnet';
 
         const userStateCurrent = await fetchUserState(currentMode);
-        const marginValue = Number(userStateCurrent?.marginSummary?.accountValue ?? 0);
+        const marginValue = Number(userStateCurrent?.perpsState?.marginSummary?.accountValue ?? 0);
         const spotValue = getSpotUsdValue(userStateCurrent);
 
         console.log('Hyperliquid preflight userState:', {
@@ -172,7 +180,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         // If current network looks unfunded, check the other network to detect a mismatch.
         if ((Number.isFinite(marginValue) && marginValue <= 0) && spotValue <= 0) {
           const userStateOther = await fetchUserState(otherMode);
-          const otherMarginValue = Number(userStateOther?.marginSummary?.accountValue ?? 0);
+          const otherMarginValue = Number(userStateOther?.perpsState?.marginSummary?.accountValue ?? 0);
           const otherSpotValue = getSpotUsdValue(userStateOther);
 
           if ((Number.isFinite(otherMarginValue) && otherMarginValue > 0) || otherSpotValue > 0) {
