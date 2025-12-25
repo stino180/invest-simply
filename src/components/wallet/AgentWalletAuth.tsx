@@ -44,6 +44,14 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
   const [isRevoking, setIsRevoking] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // Prefer authorizing with the external wallet that matches the profile wallet (if present)
+  const preferredExternalWallet =
+    wallets.find(
+      (w) => w.walletClientType !== 'privy' &&
+        !!profile?.wallet_address &&
+        w.address?.toLowerCase() === profile.wallet_address.toLowerCase()
+    ) ?? wallets.find((w) => w.walletClientType !== 'privy');
+
   const networkMode = profile?.network_mode || 'mainnet';
   const isTestnet = networkMode === 'testnet';
   const hyperliquidApiUrl = isTestnet 
@@ -91,8 +99,8 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
   const handleAuthorize = async () => {
     if (!profile?.id || !agentAddress) return;
     
-    // Get the connected external wallet
-    const externalWallet = wallets.find(w => w.walletClientType !== 'privy');
+    // Get the connected external wallet (prefer the one matching the profile wallet)
+    const externalWallet = preferredExternalWallet;
     if (!externalWallet) {
       toast.error('No external wallet connected');
       return;
@@ -376,7 +384,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     );
   }
 
-  const hasExternalWallet = wallets.some(w => w.walletClientType !== 'privy');
+  const hasExternalWallet = !!preferredExternalWallet;
 
   return (
     <Card>
@@ -393,7 +401,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="text-xs">
-            This creates a trading agent on Hyperliquid that can only trade for you. 
+            This creates a trading agent on Hyperliquid that can only trade for you.
             Your funds remain in your control and you can revoke access anytime.
           </AlertDescription>
         </Alert>
@@ -405,13 +413,20 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
               <code className="bg-secondary px-1 rounded">{agentAddress.slice(0, 10)}...{agentAddress.slice(-8)}</code>
             </div>
             {hasExternalWallet ? (
-              <div>
-                Signing wallet:{' '}
-                <code className="bg-secondary px-1 rounded">
-                  {wallets.find(w => w.walletClientType !== 'privy')?.address?.slice(0, 10)}...
-                  {wallets.find(w => w.walletClientType !== 'privy')?.address?.slice(-8)}
-                </code>
-                <span className="ml-2">({isTestnet ? 'testnet' : 'mainnet'})</span>
+              <div className="space-y-1">
+                <div>
+                  Profile wallet:{' '}
+                  <code className="bg-secondary px-1 rounded">
+                    {profile?.wallet_address ? `${profile.wallet_address.slice(0, 10)}...${profile.wallet_address.slice(-8)}` : '—'}
+                  </code>
+                </div>
+                <div>
+                  Connected wallet:{' '}
+                  <code className="bg-secondary px-1 rounded">
+                    {preferredExternalWallet?.address ? `${preferredExternalWallet.address.slice(0, 10)}...${preferredExternalWallet.address.slice(-8)}` : '—'}
+                  </code>
+                  <span className="ml-2">({isTestnet ? 'testnet' : 'mainnet'})</span>
+                </div>
               </div>
             ) : null}
           </div>
