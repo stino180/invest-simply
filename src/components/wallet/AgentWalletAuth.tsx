@@ -285,14 +285,26 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       }
 
       if (result.status === 'err') {
-        const errorMsg = result.response || 'Failed to approve agent';
-        
-        // Check for specific Hyperliquid errors
+        const errorMsg = String(result.response || 'Failed to approve agent');
+        const network = isTestnet ? 'testnet' : 'mainnet';
+
+        // Hyperliquid sometimes includes the recovered signing user address in the error string.
+        // Example: "Must deposit before performing actions. User: 0x..."
+        const userMatch = errorMsg.match(/User:\s*(0x[a-fA-F0-9]{40})/);
+        const hlUser = userMatch?.[1]?.toLowerCase();
+
         if (errorMsg.includes('Must deposit before performing actions')) {
-          const network = isTestnet ? 'testnet' : 'mainnet';
-          throw new Error(`You must deposit funds to Hyperliquid ${network} before authorizing an agent. Visit the Hyperliquid app to deposit first.`);
+          if (hlUser && hlUser !== signerAddressLower) {
+            throw new Error(
+              `Hyperliquid rejected the signature as coming from ${hlUser.slice(0, 10)}...${hlUser.slice(-8)} (but your wallet signed as ${signerAddressLower.slice(0, 10)}...${signerAddressLower.slice(-8)}). This indicates a wallet/provider mismatch. Reconnect Rainbow and try again. Full error: ${errorMsg}`
+            );
+          }
+
+          throw new Error(
+            `Hyperliquid says this wallet has no deposit on ${network} for agent authorization. Full error: ${errorMsg}`
+          );
         }
-        
+
         throw new Error(errorMsg);
       }
 
