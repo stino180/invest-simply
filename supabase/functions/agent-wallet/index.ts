@@ -1,31 +1,102 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { privateKeyToAccount, generatePrivateKey } from "https://esm.sh/viem@2.21.0/accounts";
+import { encode as hexEncode, decode as hexDecode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Decrypt the stored private key
-function decryptPrivateKey(encrypted: string): string | null {
+// AES-256-GCM encryption for private keys
+async function encryptPrivateKey(privateKey: string, profileId: string): Promise<string> {
+  const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
+  if (!encryptionKey) {
+    throw new Error("ENCRYPTION_KEY not configured");
+  }
+
+  // Derive a 256-bit key from the encryption key + profileId using SHA-256
+  const keyMaterial = new TextEncoder().encode(encryptionKey + profileId);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", keyMaterial);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    hashBuffer,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"]
+  );
+
+  // Generate a random 12-byte IV
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  
+  const plaintext = new TextEncoder().encode(privateKey);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    cryptoKey,
+    plaintext
+  );
+
+  // Combine IV + ciphertext and encode as hex
+  const combined = new Uint8Array(iv.length + new Uint8Array(ciphertext).length);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  
+  return new TextDecoder().decode(hexEncode(combined));
+}
+
+async function decryptPrivateKey(encrypted: string, profileId: string): Promise<string | null> {
+  try {
+    const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
+    if (!encryptionKey) {
+      console.error("ENCRYPTION_KEY not configured");
+      return null;
+    }
+
+    // Derive the same key
+    const keyMaterial = new TextEncoder().encode(encryptionKey + profileId);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", keyMaterial);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      hashBuffer,
+      { name: "AES-GCM" },
+      false,
+      ["decrypt"]
+    );
+
+    // Decode hex string
+    const combined = hexDecode(new TextEncoder().encode(encrypted));
+    
+    // Extract IV (first 12 bytes) and ciphertext
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+    
+    const plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      cryptoKey,
+      ciphertext
+    );
+
+    return new TextDecoder().decode(plaintext);
+  } catch (error) {
+    console.error("Decryption failed:", error);
+    return null;
+  }
+}
+
+// Legacy decryption for migrating old base64-encoded keys
+function decryptLegacyKey(encrypted: string): string | null {
   try {
     const decoded = atob(encrypted);
     const parts = decoded.split(':');
     if (parts.length >= 2) {
-      // Return everything after the first colon (the private key)
       return parts.slice(1).join(':');
     }
     return null;
   } catch {
     return null;
   }
-}
-
-// Encrypt private key for storage
-function encryptPrivateKey(privateKey: string, salt: string): string {
-  const combined = `${salt}:${privateKey}`;
-  return btoa(combined);
 }
 
 serve(async (req) => {
@@ -41,7 +112,6 @@ serve(async (req) => {
     const { action, profileId, signature, nonce } = await req.json();
 
     if (action === "get-agent-address") {
-      // Get the user's specific agent wallet address
       if (!profileId) {
         throw new Error("Missing profileId");
       }
@@ -57,10 +127,27 @@ serve(async (req) => {
       }
 
       // If user already has an agent wallet, validate the stored private key matches the address.
-      // If mismatched/corrupted (from older versions), rotate wallet and require re-authorization.
       if (profile?.agent_wallet_address) {
         const encrypted = profile.agent_wallet_private_key_encrypted as string | null | undefined;
-        const decrypted = encrypted ? decryptPrivateKey(encrypted) : null;
+        
+        // Try new AES decryption first, then legacy base64
+        let decrypted: string | null = null;
+        if (encrypted) {
+          decrypted = await decryptPrivateKey(encrypted, profileId);
+          if (!decrypted) {
+            // Try legacy decryption for migration
+            decrypted = decryptLegacyKey(encrypted);
+            if (decrypted) {
+              console.log("Migrating legacy encrypted key to AES-256-GCM");
+              // Re-encrypt with new method
+              const newEncrypted = await encryptPrivateKey(decrypted, profileId);
+              await supabase
+                .from("profiles")
+                .update({ agent_wallet_private_key_encrypted: newEncrypted })
+                .eq("id", profileId);
+            }
+          }
+        }
 
         if (decrypted) {
           const derived = privateKeyToAccount(decrypted as `0x${string}`).address;
@@ -89,7 +176,7 @@ serve(async (req) => {
         const agentPrivateKey = generatePrivateKey();
         const agentAccount = privateKeyToAccount(agentPrivateKey);
         const agentAddress = agentAccount.address;
-        const encryptedKey = encryptPrivateKey(agentPrivateKey, profileId);
+        const encryptedKey = await encryptPrivateKey(agentPrivateKey, profileId);
 
         const { error: updateError } = await supabase
           .from("profiles")
@@ -120,7 +207,7 @@ serve(async (req) => {
       const agentPrivateKey = generatePrivateKey();
       const agentAccount = privateKeyToAccount(agentPrivateKey);
       const agentAddress = agentAccount.address;
-      const encryptedKey = encryptPrivateKey(agentPrivateKey, profileId);
+      const encryptedKey = await encryptPrivateKey(agentPrivateKey, profileId);
 
       // Save to profile
       const { error: updateError } = await supabase
@@ -150,12 +237,10 @@ serve(async (req) => {
     }
 
     if (action === "register-authorization") {
-      // User has authorized the agent wallet on Hyperliquid
       if (!profileId) {
         throw new Error("Missing profileId");
       }
 
-      // Get the user's agent wallet address
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("agent_wallet_address")
@@ -192,7 +277,6 @@ serve(async (req) => {
     }
 
     if (action === "check-authorization") {
-      // Check if user has authorized the agent on Hyperliquid
       if (!profileId) {
         throw new Error("Missing profileId");
       }
@@ -221,7 +305,6 @@ serve(async (req) => {
     }
 
     if (action === "revoke-authorization") {
-      // Remove agent wallet authorization (but keep the wallet for future use)
       if (!profileId) {
         throw new Error("Missing profileId");
       }
@@ -247,7 +330,6 @@ serve(async (req) => {
     }
 
     if (action === "get-agent-private-key") {
-      // Get the decrypted private key for trading operations (internal use only)
       if (!profileId) {
         throw new Error("Missing profileId");
       }
@@ -270,7 +352,12 @@ serve(async (req) => {
         throw new Error("No agent wallet key found");
       }
 
-      const privateKey = decryptPrivateKey(profile.agent_wallet_private_key_encrypted);
+      // Try new decryption first, then legacy
+      let privateKey = await decryptPrivateKey(profile.agent_wallet_private_key_encrypted, profileId);
+      if (!privateKey) {
+        privateKey = decryptLegacyKey(profile.agent_wallet_private_key_encrypted);
+      }
+      
       if (!privateKey) {
         throw new Error("Failed to decrypt agent wallet key");
       }
