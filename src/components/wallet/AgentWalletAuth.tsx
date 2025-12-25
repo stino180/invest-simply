@@ -50,6 +50,10 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     ? 'https://api.hyperliquid-testnet.xyz/exchange'
     : 'https://api.hyperliquid.xyz/exchange';
 
+  const hyperliquidInfoUrl = isTestnet
+    ? 'https://api.hyperliquid-testnet.xyz/info'
+    : 'https://api.hyperliquid.xyz/info';
+
   // Hyperliquid signature chain IDs
   // - For signing (EIP-712 domain) we use a NUMBER
   // - For the exchange API request body we must send the chain id in HEX string form (per docs)
@@ -124,6 +128,29 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
           `Wallet account mismatch. Your wallet is currently set to ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} but the app expects ${expectedWalletAddress.slice(0, 10)}...${expectedWalletAddress.slice(-8)}. Switch accounts in your wallet and try again.`
         );
       }
+      // Preflight: verify Hyperliquid account exists / has funds for the signing address
+      try {
+        const preflightRes = await fetch(hyperliquidInfoUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'userState', user: signerAddressLower }),
+        });
+
+        const preflightText = await preflightRes.text();
+        const preflightJson = JSON.parse(preflightText);
+        const accountValue = Number(preflightJson?.marginSummary?.accountValue ?? 0);
+
+        if (!Number.isFinite(accountValue) || accountValue <= 0) {
+          const network = isTestnet ? 'testnet' : 'mainnet';
+          throw new Error(
+            `No Hyperliquid ${network} deposit detected for ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} (accountValue=${accountValue}). Deposit in Hyperliquid and try again.`
+          );
+        }
+      } catch (e: any) {
+        // If this fails (CORS / API hiccup), do not block signing; Hyperliquid will still validate on approve.
+        console.warn('Hyperliquid preflight check failed:', e?.message || e);
+      }
+
       const nonce = Date.now();
       const hyperliquidChain = isTestnet ? 'Testnet' : 'Mainnet';
 
@@ -326,8 +353,21 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         </Alert>
 
         {agentAddress && (
-          <div className="text-xs text-muted-foreground">
-            Agent address: <code className="bg-secondary px-1 rounded">{agentAddress.slice(0, 10)}...{agentAddress.slice(-8)}</code>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div>
+              Agent address:{' '}
+              <code className="bg-secondary px-1 rounded">{agentAddress.slice(0, 10)}...{agentAddress.slice(-8)}</code>
+            </div>
+            {hasExternalWallet ? (
+              <div>
+                Signing wallet:{' '}
+                <code className="bg-secondary px-1 rounded">
+                  {wallets.find(w => w.walletClientType !== 'privy')?.address?.slice(0, 10)}...
+                  {wallets.find(w => w.walletClientType !== 'privy')?.address?.slice(-8)}
+                </code>
+                <span className="ml-2">({isTestnet ? 'testnet' : 'mainnet'})</span>
+              </div>
+            ) : null}
           </div>
         )}
 
