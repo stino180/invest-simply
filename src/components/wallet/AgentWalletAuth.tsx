@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Shield, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { recoverTypedDataAddress } from 'viem';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -235,8 +236,26 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       // Sign with the wallet (use replacer to handle any BigInt values)
       const signatureHex = await provider.request({
         method: 'eth_signTypedData_v4',
-        params: [signerAddressLower, JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v)],
+        params: [
+          signerAddressLower,
+          JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v),
+        ],
       });
+
+      // Sanity-check: verify the signature recovers the same address we think we signed with.
+      const recovered = (await recoverTypedDataAddress({
+        domain: typedData.domain,
+        types: typedData.types as any,
+        primaryType: typedData.primaryType as any,
+        message: typedData.message,
+        signature: signatureHex as `0x${string}`,
+      })).toLowerCase();
+
+      if (recovered !== signerAddressLower) {
+        throw new Error(
+          `Wallet signature mismatch: Rainbow returned a signature that recovers to ${recovered.slice(0, 10)}...${recovered.slice(-8)} but the selected account is ${signerAddressLower.slice(0, 10)}...${signerAddressLower.slice(-8)}. This is a provider/account issue (likely a different wallet session). Disconnect + reconnect Rainbow and try again.`
+        );
+      }
 
       // Split signature into r, s, v components (Hyperliquid API format)
       const signature = splitSignature(signatureHex);
