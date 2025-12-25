@@ -65,15 +65,53 @@ const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
 const TESTNET_INFO_URL = "https://api.hyperliquid-testnet.xyz/info";
 const TESTNET_EXCHANGE_URL = "https://api.hyperliquid-testnet.xyz/exchange";
 
-// Asset metadata mapping
-const ASSET_META: Record<string, { index: number; szDecimals: number }> = {
-  "BTC": { index: 0, szDecimals: 5 },
-  "ETH": { index: 1, szDecimals: 4 },
-  "SOL": { index: 5, szDecimals: 2 },
-  "DOGE": { index: 4, szDecimals: 0 },
-  "AVAX": { index: 7, szDecimals: 2 },
-  "LINK": { index: 6, szDecimals: 2 },
-};
+// Spot assets use 10000 + spotMeta index
+const SPOT_ASSET_OFFSET = 10000;
+
+// Spot asset info result
+interface SpotAssetInfo {
+  assetId: number;  // 10000 + spotMeta index
+  szDecimals: number;
+  name: string;
+}
+
+// Get spot asset info from spotMeta
+async function getSpotAssetInfo(asset: string, networkMode: string): Promise<SpotAssetInfo> {
+  const infoUrl = networkMode === 'testnet' ? TESTNET_INFO_URL : MAINNET_INFO_URL;
+
+  const spotMetaResponse = await fetchWithRetry(infoUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "spotMeta" }),
+  });
+
+  if (!spotMetaResponse.ok) {
+    throw new Error(`Failed to fetch spotMeta: ${spotMetaResponse.statusText}`);
+  }
+
+  const spotMeta = await spotMetaResponse.json();
+  const universe: Array<{ name: string; tokens: number[]; index: number; szDecimals?: number }> = 
+    spotMeta?.universe ?? [];
+  
+  // Match by base token symbol
+  let spotInfo = universe.find((u) => 
+    u.name === asset || 
+    u.name === `${asset}/USDC` ||
+    u.name.split("/")[0] === asset
+  );
+
+  if (!spotInfo) {
+    console.log("Available spot pairs:", universe.map(u => u.name).join(", "));
+    throw new Error(`Spot asset ${asset} not found in spotMeta`);
+  }
+
+  const assetId = SPOT_ASSET_OFFSET + spotInfo.index;
+  const szDecimals = spotInfo.szDecimals ?? 4;
+
+  console.log(`Resolved spot asset: ${spotInfo.name} -> assetId=${assetId}, szDecimals=${szDecimals}`);
+
+  return { assetId, szDecimals, name: spotInfo.name };
+}
 
 // Get current price from Hyperliquid with retry
 async function getAssetPrice(asset: string, networkMode: string): Promise<number> {
@@ -236,28 +274,26 @@ async function executeHyperliquidOrder(
   // Determine which wallet address to use for the order
   const tradingAddress = useAgentWallet ? profile.agent_wallet_address! : profile.wallet_address;
   
-  const assetMeta = ASSET_META[asset];
-  if (!assetMeta) {
-    throw new Error(`Asset ${asset} not supported`);
-  }
+  // Get SPOT asset info (not perp)
+  const spotInfo = await getSpotAssetInfo(asset, networkMode);
 
   // Calculate size and price with slippage for market-like execution
   const amountCrypto = amountUsd / currentPrice;
   const slippageMultiplier = 1 + (slippage / 100);
   const limitPrice = currentPrice * slippageMultiplier;
   
-  const formattedSize = formatSize(amountCrypto, assetMeta.szDecimals);
+  const formattedSize = formatSize(amountCrypto, spotInfo.szDecimals);
   const formattedPrice = formatPrice(limitPrice);
 
-  console.log(`Placing order: ${formattedSize} ${asset} @ ${formattedPrice} (market: ${currentPrice})`);
+  console.log(`Placing SPOT order: assetId=${spotInfo.assetId} (${spotInfo.name}) ${formattedSize} ${asset} @ ${formattedPrice} (market: ${currentPrice})`);
 
   const timestamp = Date.now();
   
-  // Hyperliquid order action
+  // SPOT order action - uses 10000 + spotMeta index
   const action = {
     type: "order",
     orders: [{
-      a: assetMeta.index,
+      a: spotInfo.assetId,  // SPOT asset ID
       b: true, // isBuy
       p: formattedPrice,
       s: formattedSize,
