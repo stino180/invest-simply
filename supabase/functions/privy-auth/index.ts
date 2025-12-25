@@ -130,9 +130,15 @@ serve(async (req) => {
     if (existingProfile) {
       // Update wallet address if changed
       if (walletAddress && existingProfile.wallet_address !== walletAddress) {
+        console.log(`Wallet address changed from ${existingProfile.wallet_address} to ${walletAddress}`);
+        // When wallet changes, agent authorization is invalidated since Hyperliquid
+        // agent approvals are tied to the approving wallet
         await supabase
           .from('profiles')
-          .update({ wallet_address: walletAddress })
+          .update({ 
+            wallet_address: walletAddress,
+            agent_wallet_authorized_at: null  // Require re-authorization with new wallet
+          })
           .eq('id', existingProfile.id);
       }
 
@@ -140,7 +146,14 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          profile: { ...existingProfile, wallet_address: walletAddress || existingProfile.wallet_address },
+          profile: { 
+            ...existingProfile, 
+            wallet_address: walletAddress || existingProfile.wallet_address,
+            // If wallet changed, auth is now null
+            agent_wallet_authorized_at: (walletAddress && existingProfile.wallet_address !== walletAddress) 
+              ? null 
+              : existingProfile.agent_wallet_authorized_at
+          },
           isNewUser: false 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
