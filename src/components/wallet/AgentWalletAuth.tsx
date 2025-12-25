@@ -50,10 +50,6 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     ? 'https://api.hyperliquid-testnet.xyz/exchange'
     : 'https://api.hyperliquid.xyz/exchange';
 
-  const hyperliquidInfoUrl = isTestnet
-    ? 'https://api.hyperliquid-testnet.xyz/info'
-    : 'https://api.hyperliquid.xyz/info';
-
   // Hyperliquid signature chain IDs
   // - For signing (EIP-712 domain) we use a NUMBER
   // - For the exchange API request body we must send the chain id in HEX string form (per docs)
@@ -128,27 +124,40 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
           `Wallet account mismatch. Your wallet is currently set to ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} but the app expects ${expectedWalletAddress.slice(0, 10)}...${expectedWalletAddress.slice(-8)}. Switch accounts in your wallet and try again.`
         );
       }
-      // Preflight: verify Hyperliquid account exists / has funds for the signing address
+      // Preflight (server-side): verify Hyperliquid account exists / has funds for the signing address
       try {
-        const preflightRes = await fetch(hyperliquidInfoUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'userState', user: signerAddressLower }),
+        const { data: preflightData, error: preflightError } = await supabase.functions.invoke(
+          'hyperliquid-userstate',
+          {
+            body: {
+              address: signerAddressLower,
+              networkMode: isTestnet ? 'testnet' : 'mainnet',
+            },
+          }
+        );
+
+        if (preflightError) throw preflightError;
+
+        const accountValue = Number(preflightData?.userState?.marginSummary?.accountValue ?? 0);
+        console.log('Hyperliquid preflight userState:', {
+          networkMode,
+          signerAddress: signerAddressLower,
+          accountValue,
+          userState: preflightData?.userState,
         });
 
-        const preflightText = await preflightRes.text();
-        const preflightJson = JSON.parse(preflightText);
-        const accountValue = Number(preflightJson?.marginSummary?.accountValue ?? 0);
-
-        if (!Number.isFinite(accountValue) || accountValue <= 0) {
+        // If Hyperliquid reports no account value, surface a very explicit message.
+        if (Number.isFinite(accountValue) && accountValue <= 0) {
           const network = isTestnet ? 'testnet' : 'mainnet';
           throw new Error(
-            `No Hyperliquid ${network} deposit detected for ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} (accountValue=${accountValue}). Deposit in Hyperliquid and try again.`
+            `Hyperliquid says this wallet has no deposit on ${network} (accountValue=${accountValue}). Make sure you deposited on ${network} with ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)}.`
           );
         }
       } catch (e: any) {
-        // If this fails (CORS / API hiccup), do not block signing; Hyperliquid will still validate on approve.
-        console.warn('Hyperliquid preflight check failed:', e?.message || e);
+        // If we get a clear preflight error, show it (better than the generic "Must deposit" later)
+        if (e?.message) {
+          throw e;
+        }
       }
 
       const nonce = Date.now();
