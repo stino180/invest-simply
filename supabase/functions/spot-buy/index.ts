@@ -67,17 +67,8 @@ const MAINNET_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
 const TESTNET_INFO_URL = "https://api.hyperliquid-testnet.xyz/info";
 const TESTNET_EXCHANGE_URL = "https://api.hyperliquid-testnet.xyz/exchange";
 
-// Size decimals for common perps (fallback if meta lookup doesn't include size decimals)
-const PERP_SZ_DECIMALS: Record<string, number> = {
-  BTC: 5,
-  ETH: 4,
-  SOL: 2,
-  DOGE: 0,
-  AVAX: 2,
-  LINK: 2,
-  HYPE: 2,
-  PURR: 0,
-};
+// Spot assets use 10000 + spotMeta index
+const SPOT_ASSET_OFFSET = 10000;
 
 // Decrypt the stored private key
 function decryptPrivateKey(encrypted: string): string | null {
@@ -176,29 +167,63 @@ async function getSpotPrice(asset: string, networkMode: string): Promise<number>
   return parseFloat(price);
 }
 
-// Perps use meta.universe index as the asset id (with retry)
-async function getPerpAssetId(asset: string, networkMode: string): Promise<number> {
+// Spot uses spotMeta to get asset info (index, size decimals, etc.)
+interface SpotAssetInfo {
+  assetId: number;  // 10000 + spotMeta index
+  szDecimals: number;
+  name: string;
+}
+
+async function getSpotAssetInfo(asset: string, networkMode: string): Promise<SpotAssetInfo> {
   const infoUrl = networkMode === "testnet" ? TESTNET_INFO_URL : MAINNET_INFO_URL;
 
-  const metaResponse = await fetchWithRetry(infoUrl, {
+  const spotMetaResponse = await fetchWithRetry(infoUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "meta" }),
+    body: JSON.stringify({ type: "spotMeta" }),
   });
 
-  if (!metaResponse.ok) {
-    throw new Error(`Failed to fetch meta: ${metaResponse.statusText}`);
+  if (!spotMetaResponse.ok) {
+    throw new Error(`Failed to fetch spotMeta: ${spotMetaResponse.statusText}`);
   }
 
-  const meta = await metaResponse.json();
-  const universe: Array<{ name: string }> = meta?.universe ?? [];
-  const idx = universe.findIndex((u) => u.name === asset);
+  const spotMeta = await spotMetaResponse.json();
+  
+  // spotMeta has a "universe" array with spot pairs
+  // Each item has: { name, tokens, index, ... }
+  // We need to match by the base token symbol (e.g., "HYPE" from "HYPE/USDC")
+  const universe: Array<{ name: string; tokens: number[]; index: number; szDecimals?: number }> = 
+    spotMeta?.universe ?? [];
+  
+  // The "name" in spotMeta is typically "TOKEN/USDC" format
+  // Match either the exact name or the base token
+  let spotInfo = universe.find((u) => 
+    u.name === asset || 
+    u.name === `${asset}/USDC` ||
+    u.name.split("/")[0] === asset
+  );
 
-  if (idx < 0) {
-    throw new Error(`Unsupported asset for trading: ${asset}`);
+  if (!spotInfo) {
+    // Also check for @asset format used in some APIs
+    spotInfo = universe.find((u) => u.name === `@${asset}`);
   }
 
-  return idx;
+  if (!spotInfo) {
+    console.log("Available spot pairs:", universe.map(u => u.name).join(", "));
+    throw new Error(`Spot asset ${asset} not found in spotMeta. Available: ${universe.slice(0, 10).map(u => u.name).join(", ")}...`);
+  }
+
+  // Spot asset ID = 10000 + spotMeta index
+  const assetId = SPOT_ASSET_OFFSET + spotInfo.index;
+  const szDecimals = spotInfo.szDecimals ?? 4;  // Default to 4 if not specified
+
+  console.log(`Resolved spot asset: ${spotInfo.name} -> assetId=${assetId}, szDecimals=${szDecimals}`);
+
+  return {
+    assetId,
+    szDecimals,
+    name: spotInfo.name,
+  };
 }
 
 function formatSize(size: number, szDecimals: number): string {
@@ -353,9 +378,10 @@ serve(async (req) => {
     const currentPrice = await getSpotPrice(asset, networkMode);
     console.log(`Current ${asset} price: $${currentPrice}`);
 
-    // Resolve perp asset id + size decimals
-    const perpAssetId = await getPerpAssetId(asset, networkMode);
-    const szDecimals = PERP_SZ_DECIMALS[asset] ?? 4;
+    // Resolve SPOT asset info (not perp!)
+    const spotInfo = await getSpotAssetInfo(asset, networkMode);
+    const spotAssetId = spotInfo.assetId;
+    const szDecimals = spotInfo.szDecimals;
 
     // Calculate size and limit price
     const amountCrypto = amountUsd / currentPrice;
@@ -366,12 +392,12 @@ serve(async (req) => {
     const formattedPrice = formatPrice(limitPrice);
 
     console.log(
-      `Placing order: assetId=${perpAssetId} ${formattedSize} ${asset} @ ${formattedPrice} (market: ${currentPrice})`
+      `Placing SPOT order: assetId=${spotAssetId} (${spotInfo.name}) ${formattedSize} ${asset} @ ${formattedPrice} (market: ${currentPrice})`
     );
 
     const timestamp = Date.now();
 
-    // Perp order action (meta.universe index)
+    // SPOT order action - uses 10000 + spotMeta index
     // IMPORTANT: Hyperliquid signatures are sensitive to msgpack field ordering.
     // We keep a plain JS object for the HTTP request body, and a Map-based version
     // (stable insertion order) for msgpack signing.
@@ -379,7 +405,7 @@ serve(async (req) => {
       type: "order",
       orders: [
         {
-          a: perpAssetId,
+          a: spotAssetId,  // SPOT asset ID = 10000 + spotMeta index
           b: true, // isBuy
           p: formattedPrice,
           s: formattedSize,
@@ -396,7 +422,7 @@ serve(async (req) => {
         "orders",
         [
           new Map<string, unknown>([
-            ["a", perpAssetId],
+            ["a", spotAssetId],  // SPOT asset ID
             ["b", true],
             ["p", formattedPrice],
             ["s", formattedSize],
@@ -433,7 +459,7 @@ serve(async (req) => {
       vaultAddress: null,
     };
 
-    console.log("Submitting spot order to Hyperliquid...");
+    console.log("Submitting SPOT order to Hyperliquid...");
 
     const response = await fetchWithRetry(exchangeUrl, {
       method: "POST",

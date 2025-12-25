@@ -31,22 +31,54 @@ Deno.serve(async (req) => {
         ? 'https://api.hyperliquid-testnet.xyz/info'
         : 'https://api.hyperliquid.xyz/info';
 
-    const hlRes = await fetch(infoUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'userState', user: address.toLowerCase() }),
-    });
+    const lowercaseAddress = address.toLowerCase();
 
-    const text = await hlRes.text();
-    let json: unknown = null;
+    // Fetch both perps (clearinghouseState) and spot (spotClearinghouseState) in parallel
+    const [perpsRes, spotRes] = await Promise.all([
+      fetch(infoUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'clearinghouseState', user: lowercaseAddress }),
+      }),
+      fetch(infoUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'spotClearinghouseState', user: lowercaseAddress }),
+      }),
+    ]);
+
+    const perpsText = await perpsRes.text();
+    const spotText = await spotRes.text();
+
+    let perpsData: unknown = null;
+    let spotData: unknown = null;
+
     try {
-      json = JSON.parse(text);
+      perpsData = JSON.parse(perpsText);
     } catch {
-      json = { raw: text };
+      perpsData = { raw: perpsText };
     }
 
+    try {
+      spotData = JSON.parse(spotText);
+    } catch {
+      spotData = { raw: spotText };
+    }
+
+    console.log(`Fetched state for ${lowercaseAddress} on ${networkMode}:`);
+    console.log('Perps:', JSON.stringify(perpsData).substring(0, 200));
+    console.log('Spot:', JSON.stringify(spotData).substring(0, 200));
+
     return new Response(
-      JSON.stringify({ success: true, networkMode, address: address.toLowerCase(), userState: json }),
+      JSON.stringify({
+        success: true,
+        networkMode,
+        address: lowercaseAddress,
+        perpsState: perpsData,
+        spotState: spotData,
+        // Keep userState for backward compat (now uses perps data)
+        userState: perpsData,
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {
