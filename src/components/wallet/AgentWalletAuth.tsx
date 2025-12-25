@@ -42,6 +42,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const networkMode = profile?.network_mode || 'mainnet';
   const isTestnet = networkMode === 'testnet';
@@ -98,6 +99,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     }
 
     setIsAuthorizing(true);
+    setAuthError(null);
     try {
       // Get the wallet provider
       const provider = await externalWallet.getEthereumProvider();
@@ -224,10 +226,13 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       toast.success('Agent wallet authorized! Automated trading is now enabled.');
     } catch (error: any) {
       console.error('Error authorizing agent:', error);
-      if (error.message?.includes('User rejected')) {
+      const message = error?.message || 'Failed to authorize agent wallet';
+      setAuthError(message);
+
+      if (message.includes('User rejected')) {
         toast.error('Signature request was rejected');
       } else {
-        toast.error(error.message || 'Failed to authorize agent wallet');
+        toast.error(message);
       }
     } finally {
       setIsAuthorizing(false);
@@ -334,20 +339,48 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
             </AlertDescription>
           </Alert>
         ) : (
-          <Button 
-            onClick={handleAuthorize}
-            disabled={isAuthorizing}
-            className="w-full"
-          >
-            {isAuthorizing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Authorizing...
-              </>
-            ) : (
-              'Authorize Agent Wallet'
-            )}
-          </Button>
+          <div className="space-y-3">
+            <Button 
+              onClick={handleAuthorize}
+              disabled={isAuthorizing}
+              className="w-full"
+            >
+              {isAuthorizing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Authorizing...
+                </>
+              ) : (
+                'Authorize Agent Wallet'
+              )}
+            </Button>
+
+            {authError ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs space-y-2">
+                  <div>{authError}</div>
+                  {authError.toLowerCase().includes('deposit funds') ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const url = isTestnet
+                            ? 'https://app.hyperliquid-testnet.xyz/'
+                            : 'https://app.hyperliquid.xyz/';
+                          window.open(url, '_blank', 'noopener,noreferrer');
+                        }}
+                      >
+                        Open Hyperliquid
+                      </Button>
+                    </div>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
         )}
       </CardContent>
     </Card>
