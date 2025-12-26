@@ -1,5 +1,6 @@
 import { PrivyProvider as PrivyProviderBase } from '@privy-io/react-auth';
 import { ReactNode } from 'react';
+import { arbitrum, arbitrumSepolia } from 'viem/chains';
 
 interface PrivyProviderProps {
   children: ReactNode;
@@ -29,6 +30,9 @@ export const PrivyProvider = ({ children }: PrivyProviderProps) => {
           },
         },
         loginMethods: ['email', 'wallet'],
+        // Hyperliquid requires Arbitrum
+        supportedChains: [arbitrum, arbitrumSepolia],
+        defaultChain: arbitrum,
       }}
     >
       {children}
