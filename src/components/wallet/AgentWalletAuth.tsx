@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { usePrivyAuth } from '@/context/PrivyAuthContext';
-import { useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { toast } from 'sonner';
 
 interface AgentWalletAuthProps {
@@ -38,6 +38,7 @@ const splitSignature = (signatureHex: string): { r: string; s: string; v: number
 export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps) => {
   const { profile, refreshProfile } = usePrivyAuth();
   const { wallets } = useWallets();
+  const { connectWallet, unlinkWallet } = usePrivy();
   const [agentAddress, setAgentAddress] = useState<string | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,6 +107,38 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     } catch (e) {
       console.error('Error disconnecting wallet:', e);
       toast.error('Failed to disconnect wallet');
+    }
+  };
+
+  const handleHardResetWalletConnection = async () => {
+    try {
+      // This clears the linked wallet session inside Privy (helps when WalletConnect gets "stuck" on a different account).
+      const externalAddresses = wallets
+        .filter((w) => w.walletClientType !== 'privy')
+        .map((w) => w.address)
+        .filter((a): a is string => !!a);
+
+      for (const address of externalAddresses) {
+        try {
+          await unlinkWallet(address);
+        } catch (e) {
+          // Ignore if already unlinked / not unlinkable
+          console.warn('unlinkWallet failed (ignored):', address, e);
+        }
+      }
+
+      setLastSigningAddress(null);
+
+      connectWallet({
+        walletList: ['rainbow'],
+        description: 'Reconnect Rainbow to refresh your WalletConnect session.',
+      });
+
+      await refreshProfile();
+      toast.success('Wallet connection reset. Reconnect Rainbow and try again.');
+    } catch (e) {
+      console.error('Hard reset wallet connection failed:', e);
+      toast.error('Failed to reset wallet connection');
     }
   };
 
@@ -506,14 +539,24 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
 
                     {authError.toLowerCase().includes('signature mismatch') ||
                     authError.toLowerCase().includes('provider mismatch') ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={handleDisconnectExternalWallet}
-                      >
-                        Disconnect wallet
-                      </Button>
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={handleDisconnectExternalWallet}
+                        >
+                          Disconnect wallet
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={handleHardResetWalletConnection}
+                        >
+                          Reset Rainbow connection
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 </AlertDescription>
