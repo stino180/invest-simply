@@ -44,6 +44,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [lastSigningAddress, setLastSigningAddress] = useState<string | null>(null);
 
   // Prefer authorizing with the external wallet that matches the profile wallet (if present)
   const preferredExternalWallet =
@@ -121,140 +122,51 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     setIsAuthorizing(true);
     setAuthError(null);
     try {
-      // Get the wallet provider
       const provider = await externalWallet.getEthereumProvider();
 
-      // We MUST sign with the same wallet that has funds on Hyperliquid.
-      // Prefer the profile wallet if present; otherwise fall back to the selected external wallet.
-      const expectedWalletAddress = profile?.wallet_address || externalWallet.address;
-      const expectedWalletAddressLower = expectedWalletAddress.toLowerCase();
-      const agentAddressLower = agentAddress.toLowerCase();
-
-      // Note: EIP-712 signing doesn't require being on a specific chain - the chainId is in the domain
-
-      // IMPORTANT: sign with the wallet's currently selected account
+      // Ask wallet for the currently active account
       const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
-      const signerAddress = accounts?.[0];
-      if (!signerAddress) {
+      const requestedSigner = accounts?.[0];
+      if (!requestedSigner) {
         throw new Error('No active wallet account found. Please unlock your wallet and try again.');
       }
-      const signerAddressLower = signerAddress.toLowerCase();
+      const requestedSignerLower = requestedSigner.toLowerCase();
 
-      if (signerAddressLower !== expectedWalletAddressLower) {
-        throw new Error(
-          `Wallet mismatch. Your wallet is currently set to ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} but the app/profile expects ${expectedWalletAddress.slice(0, 10)}...${expectedWalletAddress.slice(-8)}. Switch accounts in Rainbow and try again.`
-        );
-      }
-      
-      // Preflight (server-side): verify Hyperliquid account exists / has funds for the signing address
-      // NOTE: Hyperliquid can have funds in *spot* even if marginSummary.accountValue is 0.
-      const fetchUserState = async (mode: 'mainnet' | 'testnet') => {
-        const { data, error } = await supabase.functions.invoke('hyperliquid-userstate', {
-          body: {
-            address: signerAddressLower,
-            networkMode: mode,
-          },
-        });
-        if (error) throw error;
-        // Return full response with both perpsState and spotState
-        return {
-          perpsState: data?.perpsState,
-          spotState: data?.spotState,
-        };
-      };
-
-      const getSpotUsdValue = (state: { perpsState?: any; spotState?: any }): number => {
-        const balances = state?.spotState?.balances;
-        if (!Array.isArray(balances)) return 0;
-        
-        // Check for USDC balance specifically
-        const usdcBalance = balances.find((b: any) => b?.coin === 'USDC');
-        if (usdcBalance) {
-          const total = Number(usdcBalance?.total ?? 0);
-          if (total > 0) return total;
-        }
-        
-        // Fallback: check if any balance has non-zero amount
-        const hasNonZero = balances.some((b: any) => {
-          const total = Number(b?.total ?? b?.amount ?? b?.balance ?? 0);
-          return Number.isFinite(total) && total > 0;
-        });
-        return hasNonZero ? 1 : 0;
-      };
-
-      try {
-        const currentMode: 'mainnet' | 'testnet' = isTestnet ? 'testnet' : 'mainnet';
-        const otherMode: 'mainnet' | 'testnet' = isTestnet ? 'mainnet' : 'testnet';
-
-        const userStateCurrent = await fetchUserState(currentMode);
-        const marginValue = Number(userStateCurrent?.perpsState?.marginSummary?.accountValue ?? 0);
-        const spotValue = getSpotUsdValue(userStateCurrent);
-
-        console.log('Hyperliquid preflight userState:', {
-          networkMode,
-          signerAddress: signerAddressLower,
-          marginAccountValue: marginValue,
-          spotValue,
-          userState: userStateCurrent,
-        });
-
-        // If current network looks unfunded, check the other network to detect a mismatch.
-        if ((Number.isFinite(marginValue) && marginValue <= 0) && spotValue <= 0) {
-          const userStateOther = await fetchUserState(otherMode);
-          const otherMarginValue = Number(userStateOther?.perpsState?.marginSummary?.accountValue ?? 0);
-          const otherSpotValue = getSpotUsdValue(userStateOther);
-
-          if ((Number.isFinite(otherMarginValue) && otherMarginValue > 0) || otherSpotValue > 0) {
-            throw new Error(
-              `Your Hyperliquid funds appear to be on ${otherMode}, but the app is set to ${currentMode}. Switch the app network in Settings and try again.`
-            );
-          }
-
-          throw new Error(
-            `Hyperliquid shows no funds for this wallet on ${currentMode} (margin=${marginValue}, spot=${spotValue}). Make sure you deposited with ${signerAddress.slice(0, 10)}...${signerAddress.slice(-8)} on ${currentMode}.`
-          );
-        }
-      } catch (e: any) {
-        if (e?.message) throw e;
-      }
-
+      const agentAddressLower = agentAddress.toLowerCase();
       const nonce = Date.now();
       const hyperliquidChain = isTestnet ? 'Testnet' : 'Mainnet';
 
-      // Build EIP-712 typed data
       const domain = {
-        name: "HyperliquidSignTransaction",
-        version: "1",
+        name: 'HyperliquidSignTransaction',
+        version: '1',
         chainId: signatureChainIdNum,
-        verifyingContract: "0x0000000000000000000000000000000000000000" as const,
+        verifyingContract: '0x0000000000000000000000000000000000000000' as const,
       };
 
       const message = {
         hyperliquidChain,
         agentAddress: agentAddressLower,
-        agentName: "DCA Bot",
+        agentName: 'DCA Bot',
         nonce,
       };
 
-      // Request signature from wallet
       const typedData = {
         domain,
         types: APPROVE_AGENT_TYPES,
-        primaryType: "HyperliquidTransaction:ApproveAgent",
+        primaryType: 'HyperliquidTransaction:ApproveAgent',
         message,
       };
 
-      // Sign with the wallet (use replacer to handle any BigInt values)
       const signatureHex = await provider.request({
         method: 'eth_signTypedData_v4',
         params: [
-          signerAddressLower,
-          JSON.stringify(typedData, (_, v) => typeof v === 'bigint' ? v.toString() : v),
+          requestedSignerLower,
+          JSON.stringify(typedData, (_, v) => (typeof v === 'bigint' ? v.toString() : v)),
         ],
       });
 
-      // Sanity-check: verify the signature recovers the same address we think we signed with.
-      const recovered = (await recoverTypedDataAddress({
+      // Source of truth: who actually signed
+      const recoveredSignerLower = (await recoverTypedDataAddress({
         domain: typedData.domain,
         types: typedData.types as any,
         primaryType: typedData.primaryType as any,
@@ -262,52 +174,93 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         signature: signatureHex as Hex,
       })).toLowerCase();
 
-      if (recovered !== signerAddressLower) {
-        throw new Error(
-          `Wallet signature mismatch: Rainbow returned a signature that recovers to ${recovered.slice(0, 10)}...${recovered.slice(-8)} but the selected account is ${signerAddressLower.slice(0, 10)}...${signerAddressLower.slice(-8)}. This is a provider/account issue (likely a different wallet session). Disconnect + reconnect Rainbow and try again.`
+      setLastSigningAddress(recoveredSignerLower);
+
+      if (recoveredSignerLower !== requestedSignerLower) {
+        toast.warning(
+          `Wallet signed with ${recoveredSignerLower.slice(0, 10)}...${recoveredSignerLower.slice(-8)} (not ${requestedSignerLower.slice(0, 10)}...${requestedSignerLower.slice(-8)}). Continuing with the recovered address.`
         );
       }
 
-      // Split signature into r, s, v components (Hyperliquid API format)
-      const signature = splitSignature(signatureHex);
+      // Preflight: ensure the REAL signing address is funded on the selected network
+      const fetchUserState = async (mode: 'mainnet' | 'testnet') => {
+        const { data, error } = await supabase.functions.invoke('hyperliquid-userstate', {
+          body: { address: recoveredSignerLower, networkMode: mode },
+        });
+        if (error) throw error;
+        return { perpsState: data?.perpsState, spotState: data?.spotState };
+      };
 
-      // Build the action with signatureChainId per Hyperliquid API spec
+      const getSpotUsdValue = (state: { perpsState?: any; spotState?: any }): number => {
+        const balances = state?.spotState?.balances;
+        if (!Array.isArray(balances)) return 0;
+
+        const usdcBalance = balances.find((b: any) => b?.coin === 'USDC');
+        if (usdcBalance) {
+          const total = Number(usdcBalance?.total ?? 0);
+          if (total > 0) return total;
+        }
+
+        const hasNonZero = balances.some((b: any) => {
+          const total = Number(b?.total ?? b?.amount ?? b?.balance ?? 0);
+          return Number.isFinite(total) && total > 0;
+        });
+        return hasNonZero ? 1 : 0;
+      };
+
+      const currentMode: 'mainnet' | 'testnet' = isTestnet ? 'testnet' : 'mainnet';
+      const otherMode: 'mainnet' | 'testnet' = isTestnet ? 'mainnet' : 'testnet';
+
+      const userStateCurrent = await fetchUserState(currentMode);
+      const marginValue = Number(userStateCurrent?.perpsState?.marginSummary?.accountValue ?? 0);
+      const spotValue = getSpotUsdValue(userStateCurrent);
+
+      if ((Number.isFinite(marginValue) && marginValue <= 0) && spotValue <= 0) {
+        const userStateOther = await fetchUserState(otherMode);
+        const otherMarginValue = Number(userStateOther?.perpsState?.marginSummary?.accountValue ?? 0);
+        const otherSpotValue = getSpotUsdValue(userStateOther);
+
+        if ((Number.isFinite(otherMarginValue) && otherMarginValue > 0) || otherSpotValue > 0) {
+          throw new Error(
+            `Your Hyperliquid funds appear to be on ${otherMode}, but the app is set to ${currentMode}. Switch the app network in Settings and try again.`
+          );
+        }
+
+        throw new Error(
+          `Hyperliquid shows no funds for this wallet on ${currentMode} (margin=${marginValue}, spot=${spotValue}). Make sure you deposited with ${recoveredSignerLower.slice(0, 10)}...${recoveredSignerLower.slice(-8)} on ${currentMode}.`
+        );
+      }
+
+      const signature = splitSignature(signatureHex);
       const action = {
-        type: "approveAgent",
+        type: 'approveAgent',
         hyperliquidChain,
         signatureChainId: signatureChainIdHex,
         agentAddress: agentAddressLower,
-        agentName: "DCA Bot",
+        agentName: 'DCA Bot',
         nonce,
       };
 
       console.log('Hyperliquid approveAgent debug:', {
         networkMode,
         hyperliquidApiUrl,
-        expectedWalletAddress,
-        expectedWalletAddressLower,
-        signerAddress,
-        signerAddressLower,
-        agentAddress,
-        agentAddressLower,
+        profileWallet: profile?.wallet_address,
+        externalWalletAddress: externalWallet.address,
+        requestedSigner: requestedSignerLower,
+        recoveredSigner: recoveredSignerLower,
+        agentAddress: agentAddressLower,
         action,
-        nonce,
         signature,
       });
 
       const response = await fetch(hyperliquidApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          nonce,
-          signature,
-        }),
+        body: JSON.stringify({ action, nonce, signature }),
       });
 
-      // Handle non-JSON error responses
       const responseText = await response.text();
-      let result;
+      let result: any;
       try {
         result = JSON.parse(responseText);
       } catch {
@@ -318,15 +271,13 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         const errorMsg = String(result.response || 'Failed to approve agent');
         const network = isTestnet ? 'testnet' : 'mainnet';
 
-        // Hyperliquid sometimes includes the recovered signing user address in the error string.
-        // Example: "Must deposit before performing actions. User: 0x..."
         const userMatch = errorMsg.match(/User:\s*(0x[a-fA-F0-9]{40})/);
         const hlUser = userMatch?.[1]?.toLowerCase();
 
         if (errorMsg.includes('Must deposit before performing actions')) {
-          if (hlUser && hlUser !== signerAddressLower) {
+          if (hlUser && hlUser !== recoveredSignerLower) {
             throw new Error(
-              `Hyperliquid rejected the signature as coming from ${hlUser.slice(0, 10)}...${hlUser.slice(-8)} (but your wallet signed as ${signerAddressLower.slice(0, 10)}...${signerAddressLower.slice(-8)}). This indicates a wallet/provider mismatch. Reconnect Rainbow and try again. Full error: ${errorMsg}`
+              `Hyperliquid rejected the signature as coming from ${hlUser.slice(0, 10)}...${hlUser.slice(-8)} (but your wallet signed as ${recoveredSignerLower.slice(0, 10)}...${recoveredSignerLower.slice(-8)}). This indicates a wallet/provider mismatch. Reconnect Rainbow and try again. Full error: ${errorMsg}`
             );
           }
 
@@ -338,11 +289,9 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         throw new Error(errorMsg);
       }
 
-      // Register authorization in our backend
       const { error: registerError } = await supabase.functions.invoke('agent-wallet', {
-        body: { action: 'register-authorization', profileId: profile.id }
+        body: { action: 'register-authorization', profileId: profile.id },
       });
-
       if (registerError) throw registerError;
 
       setIsAuthorized(true);
@@ -497,20 +446,31 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
               No external wallet connected. Please connect a wallet like Rainbow to authorize.
             </AlertDescription>
           </Alert>
-        ) : isWalletMismatch ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              Your connected wallet does not match the profile wallet. Switch your Rainbow account to match the Profile wallet above, then try again.
-            </AlertDescription>
-          </Alert>
         ) : (
           <div className="space-y-3">
-            <Button
-              onClick={handleAuthorize}
-              disabled={isAuthorizing}
-              className="w-full"
-            >
+            {isWalletMismatch ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Your connected wallet doesn’t match the profile wallet. We’ll authorize using the wallet that actually signs the message.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {lastSigningAddress && profile?.wallet_address && lastSigningAddress.toLowerCase() !== profile.wallet_address.toLowerCase() ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Last signing address was{' '}
+                  <code className="bg-secondary px-1 rounded">
+                    {lastSigningAddress.slice(0, 10)}...{lastSigningAddress.slice(-8)}
+                  </code>
+                  , which differs from the profile wallet.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            <Button onClick={handleAuthorize} disabled={isAuthorizing} className="w-full">
               {isAuthorizing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
