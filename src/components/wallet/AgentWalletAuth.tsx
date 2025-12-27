@@ -171,17 +171,73 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       }
       const requestedSignerLower = requestedSigner.toLowerCase();
 
-      // Read current chain (for UX/debug). We *do not* hard-block here because WalletConnect/wallet UIs
-      // can report a chain that differs from what the user thinks they selected, yet typed-data signing can
-      // still succeed with the correct EIP-712 domain chainId.
-      const currentChainIdHex = (await provider.request({ method: 'eth_chainId' })) as string;
-      const currentChainId = parseInt(currentChainIdHex, 16);
+      // Read current chain and sync if needed
       const requiredChainId = signatureChainIdNum;
+      const requiredChainName = isTestnet ? 'Arbitrum Sepolia' : 'Arbitrum One';
+      
+      let currentChainIdHex = (await provider.request({ method: 'eth_chainId' })) as string;
+      let currentChainId = parseInt(currentChainIdHex, 16);
 
+      // Force chain switch if not on the required chain
       if (Number.isFinite(currentChainId) && currentChainId !== requiredChainId) {
-        toast.message(
-          `Wallet reports chainId ${currentChainId} but app expects ${requiredChainId} (${isTestnet ? 'Arbitrum Sepolia' : 'Arbitrum One'}). We’ll try signing anyway.`
-        );
+        toast.message(`Switching wallet to ${requiredChainName}...`);
+        
+        try {
+          await provider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: signatureChainIdHex }],
+          });
+        } catch (switchError: any) {
+          // Chain not added to wallet (error code 4902) - try adding it
+          if (switchError?.code === 4902 || switchError?.message?.includes('Unrecognized chain')) {
+            try {
+              await provider.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: signatureChainIdHex,
+                  chainName: requiredChainName,
+                  rpcUrls: [isTestnet 
+                    ? 'https://sepolia-rollup.arbitrum.io/rpc' 
+                    : 'https://arb1.arbitrum.io/rpc'],
+                  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                  blockExplorerUrls: [isTestnet 
+                    ? 'https://sepolia.arbiscan.io' 
+                    : 'https://arbiscan.io'],
+                }],
+              });
+              // After adding, switch to it
+              await provider.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: signatureChainIdHex }],
+              });
+            } catch (addError: any) {
+              throw new Error(
+                `Failed to add ${requiredChainName} to wallet: ${addError?.message || 'Unknown error'}. Please add it manually.`
+              );
+            }
+          } else if (switchError?.code === 4001 || switchError?.message?.includes('rejected')) {
+            throw new Error(`Chain switch to ${requiredChainName} was rejected. Please approve the switch and try again.`);
+          } else {
+            throw new Error(
+              `Failed to switch to ${requiredChainName}: ${switchError?.message || 'Unknown error'}. Try switching manually in your wallet.`
+            );
+          }
+        }
+
+        // Small delay to let provider state sync
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Re-check chain after switch
+        currentChainIdHex = (await provider.request({ method: 'eth_chainId' })) as string;
+        currentChainId = parseInt(currentChainIdHex, 16);
+        
+        if (currentChainId !== requiredChainId) {
+          throw new Error(
+            `Wallet is still on chain ${currentChainId} after switch attempt. Required: ${requiredChainId} (${requiredChainName}). Please switch manually and try again.`
+          );
+        }
+        
+        toast.success(`Switched to ${requiredChainName}`);
       }
 
       const agentAddressLower = agentAddress.toLowerCase();
@@ -209,10 +265,11 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
         message,
       };
 
+      // Use original checksummed address (some providers are strict about casing)
       const signatureHex = await provider.request({
         method: 'eth_signTypedData_v4',
         params: [
-          requestedSignerLower,
+          requestedSigner,
           JSON.stringify(typedData, (_, v) => (typeof v === 'bigint' ? v.toString() : v)),
         ],
       });
