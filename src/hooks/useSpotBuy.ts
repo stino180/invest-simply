@@ -33,6 +33,21 @@ export const useSpotBuy = () => {
         throw new Error('Not authenticated');
       }
 
+      // Preflight: ensure the agent wallet is authorized before attempting a trade
+      const { data: authData, error: authErr } = await supabase.functions.invoke('agent-wallet', {
+        body: { action: 'check-authorization', profileId: profile.id },
+      });
+
+      if (authErr) {
+        throw authErr;
+      }
+
+      if (!authData?.isAuthorized) {
+        throw new Error(
+          'Agent wallet not authorized yet. Open Wallet → Authorize Agent Wallet, then try again.'
+        );
+      }
+
       const { data, error } = await supabase.functions.invoke('spot-buy', {
         body: {
           profileId: profile.id,
