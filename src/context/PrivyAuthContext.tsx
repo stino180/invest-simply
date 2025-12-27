@@ -35,9 +35,18 @@ export const PrivyAuthProvider = ({ children }: { children: ReactNode }) => {
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
   const externalWallet = wallets.find(w => w.walletClientType !== 'privy');
 
-  // Prefer the user-selected external wallet when present (matches what you connect in MetaMask/Rainbow),
-  // otherwise fall back to the embedded wallet.
-  const walletAddress = externalWallet?.address || embeddedWallet?.address || user?.wallet?.address || null;
+  // Determine what type of login was used based on linked accounts
+  const hasEmailLogin = !!user?.email?.address;
+  const hasWalletLogin = user?.linkedAccounts?.some(
+    (acc: any) => acc.type === 'wallet' && acc.walletClientType !== 'privy'
+  );
+
+  // For email-only users: use embedded wallet (created on login) or nothing
+  // For wallet users: use the external wallet they connected with
+  // This prevents cross-contamination where email user inherits a stale WalletConnect session
+  const walletAddress = hasWalletLogin
+    ? (externalWallet?.address || user?.wallet?.address || null)
+    : (embeddedWallet?.address || null);
 
   const syncWithBackend = async () => {
     if (!authenticated || !user) {
@@ -53,6 +62,15 @@ export const PrivyAuthProvider = ({ children }: { children: ReactNode }) => {
         setIsLoading(false);
         return;
       }
+
+      console.log('[PrivyAuth] Syncing with backend:', {
+        did: user.id,
+        email: user.email?.address,
+        walletAddress,
+        hasWalletLogin,
+        hasEmailLogin,
+        linkedAccounts: user.linkedAccounts?.map((a: any) => ({ type: a.type, walletClientType: a.walletClientType })),
+      });
 
       const { data, error } = await supabase.functions.invoke('privy-auth', {
         body: {
