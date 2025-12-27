@@ -171,6 +171,19 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       }
       const requestedSignerLower = requestedSigner.toLowerCase();
 
+      // CRITICAL: Verify the wallet's active account matches the profile wallet
+      const profileWalletLower = profile.wallet_address?.toLowerCase();
+      if (profileWalletLower && requestedSignerLower !== profileWalletLower) {
+        const shortExpected = `${profile.wallet_address?.slice(0, 6)}...${profile.wallet_address?.slice(-4)}`;
+        const shortActual = `${requestedSigner.slice(0, 6)}...${requestedSigner.slice(-4)}`;
+        throw new Error(
+          `Wrong wallet account active!\n\n` +
+          `Expected: ${shortExpected}\n` +
+          `Active: ${shortActual}\n\n` +
+          `Please switch to ${shortExpected} in your wallet (Rabby/MetaMask) and try again.`
+        );
+      }
+
       // Read current chain and sync if needed
       const requiredChainId = signatureChainIdNum;
       const requiredChainName = isTestnet ? 'Arbitrum Sepolia' : 'Arbitrum One';
