@@ -163,13 +163,28 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
     try {
       const provider = await externalWallet.getEthereumProvider();
 
-      // Ask wallet for the currently active account
-      const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
-      const requestedSigner = accounts?.[0];
+      // Ask wallet for connected/active accounts (for debugging + safety)
+      const connectedAccounts = (await provider.request({ method: 'eth_accounts' })) as string[];
+      const requestedSigner = externalWallet.address || connectedAccounts?.[0];
       if (!requestedSigner) {
         throw new Error('No active wallet account found. Please unlock your wallet and try again.');
       }
+
       const requestedSignerLower = requestedSigner.toLowerCase();
+      const connectedLower = (connectedAccounts || []).map((a) => a.toLowerCase());
+
+      // If the provider is not connected to the address Privy says is connected, the wallet session is stale/broken.
+      if (externalWallet.address && !connectedLower.includes(externalWallet.address.toLowerCase())) {
+        const list = connectedAccounts?.length
+          ? connectedAccounts.map((a) => `${a.slice(0, 6)}...${a.slice(-4)}`).join(', ')
+          : 'none';
+        throw new Error(
+          `Wallet session looks stale.\n\n` +
+          `Privy thinks your external wallet is: ${externalWallet.address.slice(0, 6)}...${externalWallet.address.slice(-4)}\n` +
+          `But the wallet provider is connected to: ${list}\n\n` +
+          `Please disconnect/reconnect the wallet inside the app (Reset connection) and in your wallet app, then try again.`
+        );
+      }
 
       // CRITICAL: Verify the wallet's active account matches the profile wallet
       const profileWalletLower = profile.wallet_address?.toLowerCase();
