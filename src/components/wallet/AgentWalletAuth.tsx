@@ -36,7 +36,7 @@ const splitSignature = (signatureHex: string): { r: string; s: string; v: number
 
 
 export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps) => {
-  const { profile, refreshProfile } = usePrivyAuth();
+  const { profile, refreshProfile, login } = usePrivyAuth();
   const { wallets } = useWallets();
   const { connectWallet, unlinkWallet } = usePrivy();
   const [agentAddress, setAgentAddress] = useState<string | null>(null);
@@ -72,13 +72,19 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
   }, [profile?.id]);
 
   const fetchAgentStatus = async () => {
-    if (!profile?.id) return;
-    
+    if (!profile?.id) {
+      setAgentAddress(null);
+      setIsAuthorized(false);
+      onAuthorizationChange?.(false);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       // First get the agent address
       const { data: agentData, error: agentError } = await supabase.functions.invoke('agent-wallet', {
-        body: { action: 'get-agent-address', profileId: profile.id }
+        body: { action: 'get-agent-address', profileId: profile.id },
       });
 
       if (agentError) throw agentError;
@@ -86,7 +92,7 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
 
       // Then check authorization status
       const { data: authData, error: authError } = await supabase.functions.invoke('agent-wallet', {
-        body: { action: 'check-authorization', profileId: profile.id }
+        body: { action: 'check-authorization', profileId: profile.id },
       });
 
       if (authError) throw authError;
@@ -437,6 +443,23 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       <Card>
         <CardContent className="p-6 flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!profile?.id) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary" />
+            Enable Automated Trading
+          </CardTitle>
+          <CardDescription>Log in to generate your agent wallet and authorize trading.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={login} className="w-full">Log in</Button>
         </CardContent>
       </Card>
     );

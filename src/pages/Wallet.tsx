@@ -16,15 +16,16 @@ const paymentMethods = [
 ];
 
 const Wallet = () => {
-  const { walletAddress: userWallet } = usePrivyAuth();
+  const { walletAddress: userWallet, isAuthenticated } = usePrivyAuth();
   const { transactions, usdcBalance, isSyncing, syncWallet } = useWalletData();
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [rampMode, setRampMode] = useState<'onramp' | 'offramp' | null>(null);
 
-  const walletAddress = userWallet || '0x742d...8cB2a';
+  const walletAddress = userWallet || null;
 
   const handleCopy = () => {
+    if (!walletAddress) return;
     navigator.clipboard.writeText(walletAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -70,7 +71,7 @@ const Wallet = () => {
           open={rampMode !== null}
           onOpenChange={(open) => !open && setRampMode(null)}
           mode={rampMode || 'onramp'}
-          walletAddress={walletAddress}
+          walletAddress={walletAddress ?? ''}
         />
 
         {/* Wallet Address */}
@@ -79,13 +80,15 @@ const Wallet = () => {
             <h3 className="font-semibold text-foreground">Your Wallet</h3>
             <button
               onClick={() => setShowQR(!showQR)}
-              className="p-2 rounded-lg hover:bg-secondary transition-colors"
+              disabled={!walletAddress}
+              className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              aria-disabled={!walletAddress}
             >
               <QrCode className="w-5 h-5 text-muted-foreground" />
             </button>
           </div>
 
-          {showQR && (
+          {showQR && walletAddress && (
             <div className="mb-4 p-4 bg-white rounded-xl flex items-center justify-center">
               {/* Placeholder QR */}
               <div className="w-32 h-32 bg-[repeating-conic-gradient(#000_0deg_90deg,#fff_90deg_180deg)_0_0/25%_25%] rounded-lg" />
@@ -94,14 +97,17 @@ const Wallet = () => {
 
           <div className="flex items-center gap-2">
             <code className="flex-1 p-3 bg-secondary rounded-lg text-sm font-mono truncate text-foreground">
-              {walletAddress}
+              {walletAddress ?? (isAuthenticated ? 'Loading wallet…' : 'Connect a wallet to view your address')}
             </code>
             <button
               onClick={handleCopy}
+              disabled={!walletAddress}
               className={cn(
                 'p-3 rounded-lg transition-all',
-                copied ? 'bg-success/20 text-success' : 'bg-secondary hover:bg-secondary/80'
+                copied ? 'bg-success/20 text-success' : 'bg-secondary hover:bg-secondary/80',
+                !walletAddress && 'opacity-50 pointer-events-none'
               )}
+              aria-disabled={!walletAddress}
             >
               {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
             </button>
