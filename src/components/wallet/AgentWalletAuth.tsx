@@ -358,10 +358,28 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       toast.success('Agent wallet authorized! Automated trading is now enabled.');
     } catch (error: any) {
       console.error('Error authorizing agent:', error);
-      const message = error?.message || 'Failed to authorize agent wallet';
+
+      const rawMessage =
+        error?.message ||
+        error?.cause?.message ||
+        (typeof error === 'string' ? error : '') ||
+        'Failed to authorize agent wallet';
+
+      // Privy/wallet connectors sometimes throw a generic "Unknown connector error" inside iframes
+      // (browser wallet extensions like Rabby/MetaMask may be blocked). Provide a clear next step.
+      const looksLikeConnectorIssue =
+        rawMessage.toLowerCase().includes('unknown connector error') ||
+        rawMessage.toLowerCase().includes('connector') ||
+        rawMessage.toLowerCase().includes('ethereum') ||
+        error?.name === 'SecurityError';
+
+      const message = looksLikeConnectorIssue
+        ? 'Wallet connector failed (often happens inside the preview iframe). Open the app in a new tab and try again, or use WalletConnect.'
+        : rawMessage;
+
       setAuthError(message);
 
-      if (message.includes('User rejected')) {
+      if (rawMessage.includes('User rejected')) {
         toast.error('Signature request was rejected');
       } else {
         toast.error(message);
@@ -563,45 +581,58 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
                 <AlertDescription className="text-xs space-y-2">
                   <div>{authError}</div>
 
-                  <div className="flex flex-wrap gap-2">
-                    {authError.toLowerCase().includes('deposit funds') ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const url = isTestnet
-                            ? 'https://app.hyperliquid-testnet.xyz/'
-                            : 'https://app.hyperliquid.xyz/';
-                          window.open(url, '_blank', 'noopener,noreferrer');
-                        }}
-                      >
-                        Open Hyperliquid
-                      </Button>
-                    ) : null}
+                   <div className="flex flex-wrap gap-2">
+                     {authError.toLowerCase().includes('deposit funds') ? (
+                       <Button
+                         type="button"
+                         size="sm"
+                         variant="outline"
+                         onClick={() => {
+                           const url = isTestnet
+                             ? 'https://app.hyperliquid-testnet.xyz/'
+                             : 'https://app.hyperliquid.xyz/';
+                           window.open(url, '_blank', 'noopener,noreferrer');
+                         }}
+                       >
+                         Open Hyperliquid
+                       </Button>
+                     ) : null}
 
-                    {authError.toLowerCase().includes('signature mismatch') ||
-                    authError.toLowerCase().includes('provider mismatch') ? (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={handleDisconnectExternalWallet}
-                        >
-                          Disconnect wallet
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={handleHardResetWalletConnection}
-                        >
-                          Reset Rainbow connection
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
+                     {authError.toLowerCase().includes('connector failed') ||
+                     authError.toLowerCase().includes('unknown connector error') ||
+                     authError.toLowerCase().includes('preview iframe') ? (
+                       <Button
+                         type="button"
+                         size="sm"
+                         variant="outline"
+                         onClick={() => window.open(window.location.href, '_blank', 'noopener,noreferrer')}
+                       >
+                         Open in new tab
+                       </Button>
+                     ) : null}
+
+                     {authError.toLowerCase().includes('signature mismatch') ||
+                     authError.toLowerCase().includes('provider mismatch') ? (
+                       <>
+                         <Button
+                           type="button"
+                           size="sm"
+                           variant="outline"
+                           onClick={handleDisconnectExternalWallet}
+                         >
+                           Disconnect wallet
+                         </Button>
+                         <Button
+                           type="button"
+                           size="sm"
+                           variant="outline"
+                           onClick={handleHardResetWalletConnection}
+                         >
+                           Reset Rainbow connection
+                         </Button>
+                       </>
+                     ) : null}
+                   </div>
                 </AlertDescription>
               </Alert>
             ) : null}
