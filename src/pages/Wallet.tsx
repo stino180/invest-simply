@@ -8,7 +8,6 @@ import { usePrivyAuth } from '@/context/PrivyAuthContext';
 import { useWalletData } from '@/hooks/useWalletData';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useWallets } from '@privy-io/react-auth';
 
 const paymentMethods = [
   { id: 'venmo', name: 'Venmo', icon: '💜', connected: true },
@@ -18,16 +17,12 @@ const paymentMethods = [
 
 const Wallet = () => {
   const { walletAddress: userWallet } = usePrivyAuth();
-  const { wallets } = useWallets();
   const { transactions, usdcBalance, isSyncing, syncWallet } = useWalletData();
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [rampMode, setRampMode] = useState<'onramp' | 'offramp' | null>(null);
 
   const walletAddress = userWallet || '0x742d...8cB2a';
-  
-  // Show agent authorization when an external wallet is connected (even if an embedded wallet also exists)
-  const isExternalWallet = wallets.some(w => w.walletClientType !== 'privy');
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -50,17 +45,17 @@ const Wallet = () => {
           <h2 className="text-4xl font-bold font-display mb-4 text-foreground">
             ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </h2>
-          
+
           <div className="flex gap-3">
-            <Button 
+            <Button
               className="flex-1 h-12 rounded-xl gradient-primary"
               onClick={() => setRampMode('onramp')}
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Funds
             </Button>
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               className="flex-1 h-12 rounded-xl"
               onClick={() => setRampMode('offramp')}
             >
@@ -89,14 +84,14 @@ const Wallet = () => {
               <QrCode className="w-5 h-5 text-muted-foreground" />
             </button>
           </div>
-          
+
           {showQR && (
             <div className="mb-4 p-4 bg-white rounded-xl flex items-center justify-center">
               {/* Placeholder QR */}
               <div className="w-32 h-32 bg-[repeating-conic-gradient(#000_0deg_90deg,#fff_90deg_180deg)_0_0/25%_25%] rounded-lg" />
             </div>
           )}
-          
+
           <div className="flex items-center gap-2">
             <code className="flex-1 p-3 bg-secondary rounded-lg text-sm font-mono truncate text-foreground">
               {walletAddress}
@@ -105,33 +100,24 @@ const Wallet = () => {
               onClick={handleCopy}
               className={cn(
                 'p-3 rounded-lg transition-all',
-                copied 
-                  ? 'bg-success/20 text-success' 
-                  : 'bg-secondary hover:bg-secondary/80'
+                copied ? 'bg-success/20 text-success' : 'bg-secondary hover:bg-secondary/80'
               )}
             >
               {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Send USDC (Arbitrum) to deposit funds
-          </p>
+          <p className="text-xs text-muted-foreground mt-2">Send USDC (Arbitrum) to deposit funds</p>
         </div>
 
-        {/* Agent Wallet Authorization - Only for external wallets */}
-        {isExternalWallet && (
-          <AgentWalletAuth />
-        )}
+        {/* Agent Wallet Authorization */}
+        <AgentWalletAuth />
 
         {/* Payment Methods */}
         <div>
           <h3 className="font-semibold mb-3 text-foreground">Payment Methods</h3>
           <div className="space-y-2">
             {paymentMethods.map((method) => (
-              <div
-                key={method.id}
-                className="flex items-center justify-between p-4 rounded-xl bg-card"
-              >
+              <div key={method.id} className="flex items-center justify-between p-4 rounded-xl bg-card">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg">
                     {method.icon}
@@ -166,7 +152,7 @@ const Wallet = () => {
               disabled={isSyncing}
               className="h-8 px-2"
             >
-              <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+              <RefreshCw className={cn('w-4 h-4', isSyncing && 'animate-spin')} />
             </Button>
           </div>
           {transactions.length > 0 ? (
