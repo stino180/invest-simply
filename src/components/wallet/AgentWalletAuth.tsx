@@ -171,60 +171,17 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
       }
       const requestedSignerLower = requestedSigner.toLowerCase();
 
-      // Check current chain and switch if needed
+      // Read current chain (for UX/debug). We *do not* hard-block here because WalletConnect/wallet UIs
+      // can report a chain that differs from what the user thinks they selected, yet typed-data signing can
+      // still succeed with the correct EIP-712 domain chainId.
       const currentChainIdHex = (await provider.request({ method: 'eth_chainId' })) as string;
       const currentChainId = parseInt(currentChainIdHex, 16);
       const requiredChainId = signatureChainIdNum;
-      const requiredChainIdHex = `0x${requiredChainId.toString(16)}`;
 
-      if (currentChainId !== requiredChainId) {
-        const chainName = isTestnet ? 'Arbitrum Sepolia (Testnet)' : 'Arbitrum One';
-        toast.info(`Switching to ${chainName}...`);
-
-        try {
-          await provider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: requiredChainIdHex }],
-          });
-        } catch (switchError: any) {
-          // Error code 4902 means the chain hasn't been added to the wallet
-          if (switchError?.code === 4902) {
-            const chainConfig = isTestnet
-              ? {
-                  chainId: requiredChainIdHex,
-                  chainName: 'Arbitrum Sepolia',
-                  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-                  rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
-                  blockExplorerUrls: ['https://sepolia.arbiscan.io'],
-                }
-              : {
-                  chainId: requiredChainIdHex,
-                  chainName: 'Arbitrum One',
-                  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-                  rpcUrls: ['https://arb1.arbitrum.io/rpc'],
-                  blockExplorerUrls: ['https://arbiscan.io'],
-                };
-
-            await provider.request({
-              method: 'wallet_addEthereumChain',
-              params: [chainConfig],
-            });
-          } else {
-            throw new Error(
-              `Please switch your wallet to ${isTestnet ? 'Arbitrum Sepolia' : 'Arbitrum One'} and try again.`
-            );
-          }
-        }
-
-        // Verify switch was successful
-        const newChainIdHex = (await provider.request({ method: 'eth_chainId' })) as string;
-        const newChainId = parseInt(newChainIdHex, 16);
-        if (newChainId !== requiredChainId) {
-          throw new Error(
-            `Chain switch failed. Please manually switch to ${isTestnet ? 'Arbitrum Sepolia' : 'Arbitrum One'} in your wallet.`
-          );
-        }
-        toast.success(`Switched to ${isTestnet ? 'Arbitrum Sepolia' : 'Arbitrum One'}`);
+      if (Number.isFinite(currentChainId) && currentChainId !== requiredChainId) {
+        toast.message(
+          `Wallet reports chainId ${currentChainId} but app expects ${requiredChainId} (${isTestnet ? 'Arbitrum Sepolia' : 'Arbitrum One'}). We’ll try signing anyway.`
+        );
       }
 
       const agentAddressLower = agentAddress.toLowerCase();
