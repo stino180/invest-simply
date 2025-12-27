@@ -265,11 +265,18 @@ export const AgentWalletAuth = ({ onAuthorizationChange }: AgentWalletAuthProps)
 
       setLastSigningAddress(recoveredSignerLower);
 
-      if (recoveredSignerLower !== requestedSignerLower) {
-        toast.warning(
-          `Wallet signed with ${recoveredSignerLower.slice(0, 10)}...${recoveredSignerLower.slice(-8)} (not ${requestedSignerLower.slice(0, 10)}...${requestedSignerLower.slice(-8)}). Continuing with the recovered address.`
-        );
-      }
+       if (recoveredSignerLower !== requestedSignerLower) {
+         toast.warning(
+           `Wallet signed with ${recoveredSignerLower.slice(0, 10)}...${recoveredSignerLower.slice(-8)} (not ${requestedSignerLower.slice(0, 10)}...${requestedSignerLower.slice(-8)}).`
+         );
+       }
+
+       // If the signature comes from a different address than the profile wallet, stop here and ask the user to reset.
+       if (profile?.wallet_address && recoveredSignerLower !== profile.wallet_address.toLowerCase()) {
+         throw new Error(
+           `Wallet/provider mismatch: expected ${profile.wallet_address.slice(0, 10)}...${profile.wallet_address.slice(-8)} but signature came from ${recoveredSignerLower.slice(0, 10)}...${recoveredSignerLower.slice(-8)}. Disconnect/reset your wallet connection and try again.`
+         );
+       }
 
       // Preflight: ensure the REAL signing address is funded on the selected network
       const fetchUserState = async (mode: 'mainnet' | 'testnet') => {
