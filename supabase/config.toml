@@ -1,0 +1,22 @@
+project_id = "udfrfcowkgarkigrimdl"
+
+[functions.privy-auth]
+verify_jwt = false
+
+[functions.execute-dca]
+verify_jwt = false
+
+[functions.sync-hyperliquid]
+verify_jwt = false
+
+[functions.fetch-crypto-prices]
+verify_jwt = false
+
+[functions.update-profile]
+verify_jwt = false
+
+[functions.get-wallet-data]
+verify_jwt = false
+
+[functions.agent-wallet]
+verify_jwt = false
