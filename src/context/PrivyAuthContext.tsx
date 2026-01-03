@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -32,6 +32,10 @@ export const PrivyAuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Track last synced state to prevent duplicate calls
+  const lastSyncedRef = useRef<{ did: string; wallet: string | null } | null>(null);
+  const isSyncingRef = useRef(false);
+
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
   const externalWallet = wallets.find(w => w.walletClientType !== 'privy');
 
@@ -45,12 +49,33 @@ export const PrivyAuthProvider = ({ children }: { children: ReactNode }) => {
     ? (externalWallet?.address || user?.wallet?.address || null)
     : (embeddedWallet?.address || null);
 
-  const syncWithBackend = async () => {
+  const syncWithBackend = useCallback(async (force = false) => {
     if (!authenticated || !user) {
       setProfile(null);
       setIsLoading(false);
       return;
     }
+
+    // Prevent concurrent syncs
+    if (isSyncingRef.current) {
+      console.log('[PrivyAuth] Sync already in progress, skipping');
+      return;
+    }
+
+    // Check if we already synced this exact state (idempotency check)
+    const currentState = { did: user.id, wallet: walletAddress };
+    if (
+      !force &&
+      lastSyncedRef.current &&
+      lastSyncedRef.current.did === currentState.did &&
+      lastSyncedRef.current.wallet === currentState.wallet
+    ) {
+      console.log('[PrivyAuth] Already synced this state, skipping');
+      setIsLoading(false);
+      return;
+    }
+
+    isSyncingRef.current = true;
 
     try {
       const accessToken = await getAccessToken();
@@ -90,18 +115,24 @@ export const PrivyAuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (data?.profile) {
         setProfile(data.profile);
+        // Mark this state as synced
+        lastSyncedRef.current = currentState;
       }
     } catch (err) {
       console.error('Error syncing with backend:', err);
     } finally {
+      isSyncingRef.current = false;
       setIsLoading(false);
     }
-  };
+  }, [authenticated, user, walletAddress, hasWalletLogin, getAccessToken]);
 
-  const refreshProfile = async () => {
-    await syncWithBackend();
-  };
+  const refreshProfile = useCallback(async () => {
+    // Force refresh bypasses idempotency check
+    await syncWithBackend(true);
+  }, [syncWithBackend]);
 
+  // Only trigger sync when authentication state changes, not on every wallet update
+  // The walletAddress is already captured in syncWithBackend's closure
   useEffect(() => {
     if (ready) {
       if (authenticated && user) {
@@ -109,9 +140,10 @@ export const PrivyAuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setProfile(null);
         setIsLoading(false);
+        lastSyncedRef.current = null; // Reset on logout
       }
     }
-  }, [ready, authenticated, user, walletAddress]);
+  }, [ready, authenticated, user?.id, syncWithBackend]); // Use user.id instead of user object
 
   const handleLogout = async () => {
     await privyLogout();

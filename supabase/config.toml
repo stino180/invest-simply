@@ -1,4 +1,4 @@
-project_id = "udfrfcowkgarkigrimdl"
+project_id = "dtbkglvoqssyhfaklwfj"
 
 [functions.privy-auth]
 verify_jwt = false
