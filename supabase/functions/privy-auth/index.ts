@@ -270,6 +270,7 @@ serve(async (req) => {
         wallet_type: walletAddress ? 'external' : 'privy',
         agent_wallet_address: agentWalletAddress,
         agent_wallet_private_key_encrypted: agentWalletEncrypted,
+        network_mode: 'mainnet', // Default to mainnet for new users
       })
       .select()
       .single();

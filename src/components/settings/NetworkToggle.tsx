@@ -39,8 +39,9 @@ export const NetworkToggle = () => {
       if (!data.success) throw new Error(data.error || 'Update failed');
       
       await refreshProfile();
-      
-      // Invalidate wallet data queries to force re-sync with new network
+
+      // Invalidate wallet data to force re-sync with new network
+      // Crypto prices will auto-refetch via useEffect when profile.network_mode changes
       queryClient.invalidateQueries({ queryKey: ['wallet-data'] });
       
       toast({
